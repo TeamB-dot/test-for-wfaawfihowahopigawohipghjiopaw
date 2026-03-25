@@ -1,0 +1,129 @@
+local Library = {}
+Library.Flags = {}
+
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+
+-- MAIN GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "FixedLib"
+ScreenGui.Parent = CoreGui
+
+-- CONTAINER (rechts unten stack)
+local Container = Instance.new("Frame")
+Container.Size = UDim2.new(0, 300, 1, -20)
+Container.Position = UDim2.new(1, -20, 1, -20)
+Container.AnchorPoint = Vector2.new(1,1)
+Container.BackgroundTransparency = 1
+Container.Parent = ScreenGui
+
+local UIList = Instance.new("UIListLayout", Container)
+UIList.Padding = UDim.new(0,10)
+UIList.VerticalAlignment = Enum.VerticalAlignment.Bottom
+
+-- 🔔 NOTIFICATION
+function Library:Notify(txt)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1,0,0,40)
+    frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+    frame.Parent = Container
+    
+    local corner = Instance.new("UICorner", frame)
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,-10,1,0)
+    label.Position = UDim2.new(0,10,0,0)
+    label.BackgroundTransparency = 1
+    label.Text = txt
+    label.TextColor3 = Color3.new(1,1,1)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 14
+    label.Parent = frame
+
+    frame.Position = UDim2.new(1,0,0,0)
+
+    TweenService:Create(frame, TweenInfo.new(0.3), {
+        Position = UDim2.new(0,0,0,0)
+    }):Play()
+
+    task.delay(3, function()
+        TweenService:Create(frame, TweenInfo.new(0.3), {
+            Position = UDim2.new(1,0,0,0)
+        }):Play()
+        task.wait(0.3)
+        frame:Destroy()
+    end)
+end
+
+-- 🪟 WINDOW
+function Library:CreateWindow(opts)
+    local Window = {}
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0,300,0,250)
+    frame.BackgroundColor3 = Color3.fromRGB(15,15,15)
+    frame.Parent = Container
+
+    Instance.new("UICorner", frame)
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1,0,0,30)
+    title.BackgroundTransparency = 1
+    title.Text = opts.Name or "Window"
+    title.TextColor3 = Color3.new(1,1,1)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 14
+    title.Parent = frame
+
+    local content = Instance.new("Frame")
+    content.Size = UDim2.new(1,0,1,-30)
+    content.Position = UDim2.new(0,0,0,30)
+    content.BackgroundTransparency = 1
+    content.Parent = frame
+
+    local layout = Instance.new("UIListLayout", content)
+    layout.Padding = UDim.new(0,5)
+
+    -- TAB SYSTEM SIMPEL
+    function Window:Button(text, callback)
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1,-10,0,30)
+        btn.BackgroundColor3 = Color3.fromRGB(25,25,25)
+        btn.Text = text
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 13
+        btn.Parent = content
+
+        Instance.new("UICorner", btn)
+
+        btn.MouseButton1Click:Connect(function()
+            if callback then callback() end
+        end)
+    end
+
+    function Window:Toggle(text, callback)
+        local state = false
+
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1,-10,0,30)
+        btn.BackgroundColor3 = Color3.fromRGB(25,25,25)
+        btn.Text = text .. " : OFF"
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 13
+        btn.Parent = content
+
+        Instance.new("UICorner", btn)
+
+        btn.MouseButton1Click:Connect(function()
+            state = not state
+            btn.Text = text .. " : " .. (state and "ON" or "OFF")
+            if callback then callback(state) end
+        end)
+    end
+
+    return Window
+end
+
+return Library
