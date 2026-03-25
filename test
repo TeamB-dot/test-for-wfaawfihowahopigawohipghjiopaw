@@ -1,0 +1,200 @@
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+local Color_Dark = Color3.fromRGB(14, 14, 16)
+local Color_Stroke = Color3.fromRGB(30, 30, 35)
+local Color_Divider = Color3.fromRGB(20, 20, 22)
+local Color_LightText = Color3.fromRGB(230, 230, 235)
+
+for _, child in pairs(CoreGui:GetChildren()) do
+    if child:IsA("ScreenGui") and child.Name:match("^[A-Z]%d%d%d$") then
+        child:Destroy()
+    end
+end
+
+local MainGui = Instance.new("ScreenGui")
+MainGui.Name = "X209"
+MainGui.DisplayOrder = 2147483647
+MainGui.Parent = CoreGui
+
+local NotificationHolder = Instance.new("Frame")
+NotificationHolder.Name = "NotificationHolder"
+NotificationHolder.BackgroundTransparency = 1
+NotificationHolder.AnchorPoint = Vector2.new(1, 1)
+NotificationHolder.Size = UDim2.new(0, 300, 1, -25)
+NotificationHolder.Position = UDim2.new(1, -25, 1, -25)
+NotificationHolder.Parent = MainGui
+
+local NotificationListLayout = Instance.new("UIListLayout")
+NotificationListLayout.Padding = UDim.new(0, 5)
+NotificationListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+NotificationListLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+NotificationListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+NotificationListLayout.Parent = NotificationHolder
+
+local WindowContainer = Instance.new("Frame")
+WindowContainer.Name = "WindowContainer"
+WindowContainer.Parent = Instance.new("ScreenGui", MainGui)
+WindowContainer.AnchorPoint = Vector2.new(1, 0)
+WindowContainer.Position = UDim2.new(1, 0, 0, 0)
+WindowContainer.BackgroundTransparency = 1
+WindowContainer.Size = UDim2.new(0, 300, 1, 0)
+
+local ContainerPadding = Instance.new("UIPadding", WindowContainer)
+ContainerPadding.PaddingBottom = UDim.new(0, 50)
+ContainerPadding.PaddingTop = UDim.new(0, 25)
+ContainerPadding.PaddingLeft = UDim.new(0, 25)
+
+local ContainerList = Instance.new("UIListLayout", WindowContainer)
+ContainerList.VerticalAlignment = Enum.VerticalAlignment.Bottom
+ContainerList.Padding = UDim.new(0, 15)
+
+local Library = {}
+Library.ThemeObjects = {}
+Library.Connections = {}
+Library.Flags = {}
+Library.SelectedTheme = "Default"
+Library.Font = Enum.Font.Gotham
+
+Library.Themes = {
+    Default = {
+        Main = Color3.fromRGB(8, 8, 10),
+        TextDark = Color3.fromRGB(160, 160, 165),
+        Text = Color_LightText,
+        Stroke = Color_Stroke,
+        Divider = Color_Divider,
+        Second = Color_Dark,
+    }
+}
+
+Library.Elements = {
+    RoundFrame = function(color, radiusScale, radiusOffset)
+        local Frame = Instance.new("Frame")
+        Frame.BorderSizePixel = 0
+        Frame.BackgroundColor3 = color
+        
+        local Corner = Instance.new("UICorner")
+        Corner.CornerRadius = UDim.new(radiusScale, radiusOffset)
+        Corner.Parent = Frame
+        
+        return Frame
+    end,
+
+    Label = function(text, size, transparency)
+        local Label = Instance.new("TextLabel")
+        Label.Text = text
+        Label.TextSize = size
+        Label.TextTransparency = transparency or 0
+        Label.Font = Enum.Font.GothamSemibold
+        Label.TextColor3 = Color3.fromRGB(240, 240, 240)
+        Label.TextXAlignment = Enum.TextXAlignment.Left
+        Label.BackgroundTransparency = 1
+        Label.RichText = true
+        return Label
+    end,
+
+    Stroke = function(color, thickness)
+        local Stroke = Instance.new("UIStroke")
+        Stroke.Color = color
+        Stroke.Thickness = thickness
+        return Stroke
+    end,
+
+    ScrollFrame = function(color, thickness)
+        local Scroll = Instance.new("ScrollingFrame")
+        Scroll.ScrollBarImageColor3 = color
+        Scroll.ScrollBarThickness = thickness
+        Scroll.BackgroundTransparency = 1
+        Scroll.BorderSizePixel = 0
+        Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+        Scroll.MidImage = "rbxassetid://7445543667"
+        Scroll.TopImage = "rbxassetid://7445543667"
+        Scroll.BottomImage = "rbxassetid://7445543667"
+        return Scroll
+    end
+}
+
+function Library:MakeNotification(data)
+    task.spawn(function()
+        local Title = data.Name or "Notification"
+        local Content = data.Content or ""
+        local IconID = data.Image or ""
+        local Duration = data.Time or 5
+
+        local NotifFrame = Instance.new("Frame")
+        NotifFrame.BackgroundTransparency = 1
+        NotifFrame.Size = UDim2.new(1, 0, 0, 0)
+        NotifFrame.AutomaticSize = Enum.AutomaticSize.Y
+        NotifFrame.Parent = NotificationHolder
+
+        local Background = Instance.new("Frame")
+        Background.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        Background.Position = UDim2.new(1, 10, 0, 0)
+        Background.Size = UDim2.new(1, 0, 0, 0)
+        Background.AutomaticSize = Enum.AutomaticSize.Y
+        Background.Parent = NotifFrame
+
+        local Corner = Instance.new("UICorner", Background)
+        Corner.CornerRadius = UDim.new(0, 10)
+
+        local Stroke = Instance.new("UIStroke", Background)
+        Stroke.Color = Color3.fromRGB(93, 93, 93)
+        Stroke.Thickness = 1.2
+
+        local Padding = Instance.new("UIPadding", Background)
+        Padding.PaddingBottom = UDim.new(0, 12)
+        Padding.PaddingTop = UDim.new(0, 12)
+        Padding.PaddingLeft = UDim.new(0, 12)
+        Padding.PaddingRight = UDim.new(0, 12)
+
+        local Icon = Instance.new("ImageLabel", Background)
+        Icon.BackgroundTransparency = 1
+        Icon.Image = IconID
+        Icon.Size = UDim2.new(0, 20, 0, 20)
+
+        local TitleLabel = Instance.new("TextLabel", Background)
+        TitleLabel.Text = Title
+        TitleLabel.Size = UDim2.new(1, -30, 0, 20)
+        TitleLabel.Position = UDim2.new(0, 30, 0, 0)
+        TitleLabel.Font = Enum.Font.FredokaOne
+        TitleLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+        TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+        TitleLabel.BackgroundTransparency = 1
+
+        local ContentLabel = Instance.new("TextLabel", Background)
+        ContentLabel.Text = Content
+        ContentLabel.Size = UDim2.new(1, 0, 0, 0)
+        ContentLabel.Position = UDim2.new(0, 0, 0, 25)
+        ContentLabel.AutomaticSize = Enum.AutomaticSize.Y
+        ContentLabel.Font = Enum.Font.FredokaOne
+        ContentLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+        ContentLabel.TextWrapped = true
+        ContentLabel.TextXAlignment = Enum.TextXAlignment.Left
+        ContentLabel.BackgroundTransparency = 1
+
+        TweenService:Create(Background, TweenInfo.new(0.5, Enum.EasingStyle.Quint), {Position = UDim2.new(0, 0, 0, 0)}):Play()
+        
+        task.wait(Duration)
+
+        TweenService:Create(Icon, TweenInfo.new(0.4, Enum.EasingStyle.Quint), {ImageTransparency = 1}):Play()
+        TweenService:Create(Background, TweenInfo.new(0.8, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.6}):Play()
+        TweenService:Create(Stroke, TweenInfo.new(0.6, Enum.EasingStyle.Quint), {Transparency = 0.9}):Play()
+        
+        task.wait(0.3)
+        Background:TweenPosition(UDim2.new(1, 20, 0, 0), "In", "Quint", 0.8, true)
+        task.wait(1.35)
+        NotifFrame:Destroy()
+    end)
+end
+
+function Library:Destroy()
+    MainGui:Destroy()
+end
+
+return Library
