@@ -212,13 +212,18 @@ CreateElement("Label", function(Text, TextSize, Transparency)
 end)
 
 -- Clean Notification System
-local NotificationHolder = Instance.new("Frame", {
-    Name = "NotificationHolder",
-    Parent = (gethui and gethui() or game:GetService("CoreGui")),
-    Position = UDim2.new(1, -20, 1, -20),
-    Size = UDim2.new(0, 320, 1, -40),
-    AnchorPoint = Vector2.new(1, 1),
-    BackgroundTransparency = 1,
+local NotificationHolder = SetProps(SetChildren(MakeElement("TFrame"), {
+	SetProps(MakeElement("List"), {
+		HorizontalAlignment = Enum.HorizontalAlignment.Center,
+		SortOrder           = Enum.SortOrder.LayoutOrder,
+		VerticalAlignment   = Enum.VerticalAlignment.Bottom,
+		Padding             = UDim.new(0, 6)
+	})
+}), {
+	Position    = UDim2.new(1, -20, 1, -20),
+	Size        = UDim2.new(0, 310, 1, -20),
+	AnchorPoint = Vector2.new(1, 1),
+	Parent      = Blackair
 })
 Instance.new("UIListLayout", {
     Parent = NotificationHolder,
