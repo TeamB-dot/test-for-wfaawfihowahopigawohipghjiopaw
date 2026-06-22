@@ -1,0 +1,1092 @@
+-- ╔══════════════════════════════════════════════════════╗
+-- ║  B L A C K A I R  ·  UI Library  ·  2026            ║
+-- ║  No corners. No noise. Sharp, clean, resizable.      ║
+-- ╚══════════════════════════════════════════════════════╝
+
+local UIS   = game:GetService("UserInputService")
+local Tween = game:GetService("TweenService")
+local Run   = game:GetService("RunService")
+local Plr   = game:GetService("Players")
+local Http  = game:GetService("HttpService")
+local LP    = Plr.LocalPlayer
+local Mouse = LP:GetMouse()
+
+-- ── palette ───────────────────────────────────────────────────────
+local C = {
+	Base     = Color3.fromRGB(8,   8,   8),
+	Surface  = Color3.fromRGB(12,  12,  12),
+	Card     = Color3.fromRGB(18,  18,  18),
+	Hover    = Color3.fromRGB(24,  24,  24),
+	Press    = Color3.fromRGB(30,  30,  30),
+	Border   = Color3.fromRGB(36,  36,  36),
+	Div      = Color3.fromRGB(28,  28,  28),
+	Muted    = Color3.fromRGB(90,  90,  90),
+	Dim      = Color3.fromRGB(55,  55,  55),
+	Text     = Color3.fromRGB(210, 210, 210),
+	Hi       = Color3.fromRGB(255, 255, 255),
+	PillOff  = Color3.fromRGB(30,  30,  30),
+	PillOn   = Color3.fromRGB(215, 215, 215),
+	Track    = Color3.fromRGB(20,  20,  20),
+	Fill     = Color3.fromRGB(195, 195, 195),
+}
+
+-- ── tween ─────────────────────────────────────────────────────────
+local function Tw(o, t, p, s, d)
+	Tween:Create(o, TweenInfo.new(t, s or Enum.EasingStyle.Quint, d or Enum.EasingDirection.Out), p):Play()
+end
+
+-- ── instance factory ──────────────────────────────────────────────
+local function N(cls, props, kids)
+	local o = Instance.new(cls)
+	for k, v in next, props or {} do o[k] = v end
+	for _, v in next, kids  or {} do v.Parent = o end
+	return o
+end
+
+-- NO corners anywhere — this is the signature
+local function Stroke(col, t)
+	return N("UIStroke", {Color = col or C.Border, Thickness = t or 1})
+end
+local function List(pad)
+	return N("UIListLayout", {
+		SortOrder = Enum.SortOrder.LayoutOrder,
+		Padding   = UDim.new(0, pad or 0),
+	})
+end
+local function Pad(b, l, r, t)
+	return N("UIPadding", {
+		PaddingBottom = UDim.new(0, b or 0),
+		PaddingLeft   = UDim.new(0, l or 0),
+		PaddingRight  = UDim.new(0, r or 0),
+		PaddingTop    = UDim.new(0, t or 0),
+	})
+end
+local function ScF(barW)
+	return N("ScrollingFrame", {
+		BackgroundTransparency = 1,
+		BorderSizePixel        = 0,
+		ScrollBarThickness     = barW or 2,
+		ScrollBarImageColor3   = C.Dim,
+		MidImage    = "rbxassetid://7445543667",
+		BottomImage = "rbxassetid://7445543667",
+		TopImage    = "rbxassetid://7445543667",
+		CanvasSize  = UDim2.new(0,0,0,0),
+	})
+end
+local function Lbl(txt, sz, col, font, xa)
+	return N("TextLabel", {
+		Text                   = txt or "",
+		TextColor3             = col or C.Text,
+		TextSize               = sz  or 13,
+		Font                   = font or Enum.Font.GothamSemibold,
+		BackgroundTransparency = 1,
+		RichText               = true,
+		TextXAlignment         = xa or Enum.TextXAlignment.Left,
+		TextTruncate           = Enum.TextTruncate.AtEnd,
+	})
+end
+local function Btn()
+	return N("TextButton", {
+		Text                   = "",
+		BackgroundTransparency = 1,
+		BorderSizePixel        = 0,
+		AutoButtonColor        = false,
+		Size                   = UDim2.new(1,0,1,0),
+	})
+end
+local function Card(parent, h)
+	return N("Frame", {
+		Size             = UDim2.new(1, 0, 0, h or 32),
+		BackgroundColor3 = C.Card,
+		BorderSizePixel  = 0,
+		Parent           = parent,
+	}, {Stroke(C.Border, 1)})
+end
+
+local function HOn(f)  Tw(f, 0.12, {BackgroundColor3 = C.Hover}) end
+local function HOff(f) Tw(f, 0.12, {BackgroundColor3 = C.Card})  end
+local function HPrs(f) Tw(f, 0.06, {BackgroundColor3 = C.Press}) end
+
+-- ── resize helper ────────────────────────────────────────────────
+-- Creates invisible resize handles on all edges + corners of `frame`.
+-- minW / minH = minimum size constraints.
+local function MakeResizable(frame, minW, minH)
+	minW = minW or 300
+	minH = minH or 200
+
+	local GRIP = 5  -- px grab zone
+
+	-- edge definitions: {name, cursor, anchorX, anchorY, sizeX, sizeY, posX, posY}
+	local edges = {
+		-- sides
+		{UDim2.new(0,GRIP,0,GRIP), UDim2.new(1,-GRIP*2,0,GRIP),  "left"},
+		{UDim2.new(1,-GRIP,0,GRIP),UDim2.new(0,GRIP,1,-GRIP*2),  "right"},
+		{UDim2.new(0,GRIP,0,0),    UDim2.new(1,-GRIP*2,0,GRIP),  "top"},
+		{UDim2.new(0,GRIP,1,-GRIP),UDim2.new(1,-GRIP*2,0,GRIP),  "bottom"},
+		-- corners
+		{UDim2.new(0,0,0,0),       UDim2.new(0,GRIP,0,GRIP),     "tl"},
+		{UDim2.new(1,-GRIP,0,0),   UDim2.new(0,GRIP,0,GRIP),     "tr"},
+		{UDim2.new(0,0,1,-GRIP),   UDim2.new(0,GRIP,0,GRIP),     "bl"},
+		{UDim2.new(1,-GRIP,1,-GRIP),UDim2.new(0,GRIP,0,GRIP),    "br"},
+	}
+
+	for _, e in ipairs(edges) do
+		local pos, sz, name = e[1], e[2], e[3]
+		local grip = N("TextButton", {
+			Position             = pos,
+			Size                 = sz,
+			BackgroundTransparency = 1,
+			BorderSizePixel      = 0,
+			Text                 = "",
+			AutoButtonColor      = false,
+			ZIndex               = 10,
+			Name                 = "Grip_"..name,
+			Parent               = frame,
+		})
+
+		local resizing = false
+		local startMouse, startSize, startPos
+
+		grip.InputBegan:Connect(function(i)
+			if i.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+			resizing   = true
+			startMouse = Vector2.new(i.Position.X, i.Position.Y)
+			startSize  = Vector2.new(frame.AbsoluteSize.X, frame.AbsoluteSize.Y)
+			startPos   = Vector2.new(frame.AbsolutePosition.X, frame.AbsolutePosition.Y)
+		end)
+
+		grip.InputEnded:Connect(function(i)
+			if i.UserInputType == Enum.UserInputType.MouseButton1 then
+				resizing = false
+			end
+		end)
+
+		UIS.InputChanged:Connect(function(i)
+			if not resizing then return end
+			if i.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+
+			local dx = i.Position.X - startMouse.X
+			local dy = i.Position.Y - startMouse.Y
+
+			local newW = startSize.X
+			local newH = startSize.Y
+			local newX = startPos.X
+			local newY = startPos.Y
+
+			if name == "right"  or name == "tr" or name == "br" then newW = startSize.X + dx end
+			if name == "bottom" or name == "bl" or name == "br" then newH = startSize.Y + dy end
+			if name == "left"   or name == "tl" or name == "bl" then
+				newW = startSize.X - dx
+				newX = startPos.X + dx
+			end
+			if name == "top"    or name == "tl" or name == "tr" then
+				newH = startSize.Y - dy
+				newY = startPos.Y + dy
+			end
+
+			newW = math.max(newW, minW)
+			newH = math.max(newH, minH)
+
+			frame.Size     = UDim2.new(0, newW, 0, newH)
+			frame.Position = UDim2.new(0, newX, 0, newY)
+		end)
+	end
+end
+
+-- ── drag ─────────────────────────────────────────────────────────
+local function MakeDrag(handle, frame)
+	local drag, inp, mstart, fstart = false
+	handle.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+			drag   = true
+			mstart = i.Position
+			fstart = frame.Position
+		end
+	end)
+	handle.InputEnded:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end
+	end)
+	handle.InputChanged:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseMovement then inp = i end
+	end)
+	UIS.InputChanged:Connect(function(i)
+		if i == inp and drag then
+			local d = i.Position - mstart
+			frame.Position = UDim2.new(
+				0, fstart.X.Offset + d.X,
+				0, fstart.Y.Offset + d.Y
+			)
+		end
+	end)
+end
+
+-- ── config ────────────────────────────────────────────────────────
+local function PackCol(c)   return {R=c.R*255,G=c.G*255,B=c.B*255} end
+local function UnpackCol(c) return Color3.fromRGB(c.R,c.G,c.B) end
+local function Rnd(n,f)
+	local r = math.floor(n/f + math.sign(n)*0.5)*f
+	if r < 0 then r = r + f end
+	return r
+end
+local BL_KEYS = {Enum.KeyCode.Unknown,Enum.KeyCode.W,Enum.KeyCode.A,Enum.KeyCode.S,Enum.KeyCode.D,Enum.KeyCode.Up,Enum.KeyCode.Left,Enum.KeyCode.Down,Enum.KeyCode.Right,Enum.KeyCode.Slash,Enum.KeyCode.Tab,Enum.KeyCode.Backspace,Enum.KeyCode.Escape}
+local WL_MOUSE = {Enum.UserInputType.MouseButton1,Enum.UserInputType.MouseButton2,Enum.UserInputType.MouseButton3}
+local function Has(t,v) for _,x in next,t do if x==v then return true end end end
+
+-- ═══════════════════════════════════════════════════════════════
+--  LIB ROOT
+-- ═══════════════════════════════════════════════════════════════
+local Lib = { Connections={}, Flags={}, Folder=nil, SaveCfg=false }
+
+getgenv().gethui = function() return game.CoreGui end
+
+local Root = N("ScreenGui",{
+	Name="BlackairLib", ZIndexBehavior=Enum.ZIndexBehavior.Sibling, DisplayOrder=999,
+})
+if syn and syn.protect_gui then syn.protect_gui(Root) end
+Root.Parent = gethui()
+for _, g in ipairs(gethui():GetChildren()) do
+	if g.Name == Root.Name and g ~= Root then g:Destroy() end
+end
+
+function Lib:IsRunning() return Root.Parent ~= nil end
+
+local function Conn(sig, fn)
+	if not Lib:IsRunning() then return end
+	local c = sig:Connect(fn)
+	table.insert(Lib.Connections, c)
+	return c
+end
+task.spawn(function()
+	while Lib:IsRunning() do task.wait(1) end
+	for _, c in next, Lib.Connections do pcall(function() c:Disconnect() end) end
+end)
+
+local function SaveFlag(name)
+	if not Lib.SaveCfg then return end
+	local data = {}
+	for k,v in pairs(Lib.Flags) do
+		if v.Save then data[k] = v.Type=="Colorpicker" and PackCol(v.Value) or v.Value end
+	end
+	pcall(function() writefile(Lib.Folder.."/"..name..".txt", Http:JSONEncode(data)) end)
+end
+local function LoadCfg(raw)
+	local ok,data = pcall(function() return Http:JSONDecode(raw) end)
+	if not ok then return end
+	for k,v in pairs(data) do
+		if Lib.Flags[k] then
+			task.spawn(function()
+				if Lib.Flags[k].Type=="Colorpicker" then Lib.Flags[k]:Set(UnpackCol(v))
+				else Lib.Flags[k]:Set(v) end
+			end)
+		end
+	end
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  NOTIFICATION  — slides in bottom-right, sharp card
+-- ═══════════════════════════════════════════════════════════════
+local NStack = N("Frame",{
+	BackgroundTransparency=1,
+	Size=UDim2.new(0,280,1,-16),
+	Position=UDim2.new(1,-296,0,8),
+	Parent=Root,
+},{N("UIListLayout",{
+	VerticalAlignment=Enum.VerticalAlignment.Bottom,
+	HorizontalAlignment=Enum.HorizontalAlignment.Right,
+	SortOrder=Enum.SortOrder.LayoutOrder,
+	Padding=UDim.new(0,4),
+})})
+
+function Lib:MakeNotification(cfg)
+	task.spawn(function()
+		local title   = cfg.Name    or "Notification"
+		local body    = cfg.Content or ""
+		local timeout = cfg.Time    or 5
+		local icon    = cfg.Image   or "rbxassetid://4384403532"
+
+		local wrap = N("Frame",{
+			Size=UDim2.new(1,0,0,0), AutomaticSize=Enum.AutomaticSize.Y,
+			BackgroundTransparency=1, Parent=NStack,
+		})
+
+		local card = N("Frame",{
+			Size=UDim2.new(1,0,0,0), AutomaticSize=Enum.AutomaticSize.Y,
+			BackgroundColor3=C.Surface, BorderSizePixel=0,
+			Position=UDim2.new(1,8,0,0), Parent=wrap,
+		},{Stroke(C.Border,1)})
+
+		-- 2px white left border = the only accent
+		N("Frame",{
+			Size=UDim2.new(0,2,1,0),
+			BackgroundColor3=C.Hi, BorderSizePixel=0,
+			ZIndex=5, Parent=card,
+		})
+
+		local inner = N("Frame",{
+			Size=UDim2.new(1,0,0,0), AutomaticSize=Enum.AutomaticSize.Y,
+			BackgroundTransparency=1, Parent=card,
+		},{Pad(12,16,12,12)})
+
+		N("ImageLabel",{
+			Size=UDim2.new(0,13,0,13), Position=UDim2.new(0,0,0,1),
+			Image=icon, ImageColor3=C.Dim,
+			BackgroundTransparency=1, Parent=inner,
+		})
+
+		local tl = Lbl(title, 13, C.Hi, Enum.Font.GothamBold)
+		tl.Size=UDim2.new(1,-18,0,13); tl.Position=UDim2.new(0,18,0,0); tl.Parent=inner
+
+		local bl = Lbl(body, 12, C.Muted, Enum.Font.Gotham)
+		bl.Size=UDim2.new(1,0,0,0); bl.Position=UDim2.new(0,0,0,19)
+		bl.AutomaticSize=Enum.AutomaticSize.Y; bl.TextWrapped=true; bl.Parent=inner
+
+		Tw(card,0.35,{Position=UDim2.new(0,0,0,0)})
+		task.wait(math.max(0.5, timeout-0.65))
+		Tw(card,0.22,{BackgroundTransparency=0.7},Enum.EasingStyle.Quint,Enum.EasingDirection.In)
+		task.wait(0.16)
+		Tw(card,0.35,{Position=UDim2.new(1,8,0,0)},Enum.EasingStyle.Quint,Enum.EasingDirection.In)
+		task.wait(0.38)
+		wrap:Destroy()
+	end)
+end
+
+function Lib:Init()
+	if self.SaveCfg then
+		pcall(function()
+			local path = self.Folder.."/"..game.GameId..".txt"
+			if isfile(path) then
+				LoadCfg(readfile(path))
+				self:MakeNotification({Name="Config loaded",Content=game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name,Time=4})
+			end
+		end)
+	end
+end
+
+-- ═══════════════════════════════════════════════════════════════
+--  WINDOW
+-- ═══════════════════════════════════════════════════════════════
+function Lib:MakeWindow(cfg)
+	cfg = cfg or {}
+	cfg.Name          = cfg.Name          or "Blackair"
+	cfg.ConfigFolder  = cfg.ConfigFolder  or cfg.Name
+	cfg.SaveConfig    = cfg.SaveConfig    ~= nil and cfg.SaveConfig or false
+	cfg.HidePremium   = cfg.HidePremium   or false
+	cfg.IntroEnabled  = cfg.IntroEnabled  ~= false
+	cfg.IntroText     = cfg.IntroText     or "blackair"
+	cfg.CloseCallback = cfg.CloseCallback or function() end
+	cfg.ShowIcon      = cfg.ShowIcon      or false
+	cfg.Icon          = cfg.Icon          or "rbxassetid://112904952151156"
+	cfg.IntroIcon     = cfg.IntroIcon     or "rbxassetid://112904952151156"
+
+	Lib.Folder  = cfg.ConfigFolder
+	Lib.SaveCfg = cfg.SaveConfig
+	if cfg.SaveConfig then pcall(function()
+		if not isfolder(cfg.ConfigFolder) then makefolder(cfg.ConfigFolder) end
+	end) end
+
+	local minimized = false
+	local uiHidden  = false
+	local firstTab  = true
+	local tabs      = {}   -- {btn, container, setActive}
+	local activeContainer = nil
+
+	-- ── window frame ─────────────────────────────────────────────
+	-- starts in bottom-right, user can drag/resize anywhere
+	local Win = N("Frame",{
+		Size             = UDim2.new(0, 560, 0, 310),
+		Position         = UDim2.new(1, -576, 1, -326),
+		BackgroundColor3 = C.Base,
+		BorderSizePixel  = 0,
+		ClipsDescendants = true,
+		Parent           = Root,
+	},{Stroke(C.Border,1)})
+
+	-- resize handles (invisible, 5px edges)
+	MakeResizable(Win, 340, 220)
+
+	-- ── topbar ───────────────────────────────────────────────────
+	local Topbar = N("Frame",{
+		Size=UDim2.new(1,0,0,36),
+		BackgroundColor3=C.Surface,
+		BorderSizePixel=0, Parent=Win,
+	})
+	N("Frame",{
+		Size=UDim2.new(1,0,0,1), Position=UDim2.new(0,0,1,-1),
+		BackgroundColor3=C.Border, BorderSizePixel=0, Parent=Topbar,
+	})
+
+	MakeDrag(Topbar, Win)
+
+	-- brand dot + name
+	N("Frame",{
+		Size=UDim2.new(0,5,0,5),
+		Position=UDim2.new(0, cfg.ShowIcon and 36 or 14, 0.5, -2),
+		BackgroundColor3=C.Hi, BorderSizePixel=0, Parent=Topbar,
+	})
+	local WinName = Lbl(cfg.Name, 12, C.Hi, Enum.Font.GothamBlack)
+	WinName.Size     = UDim2.new(1,-140,1,0)
+	WinName.Position = UDim2.new(0, cfg.ShowIcon and 48 or 26, 0, 0)
+	WinName.Parent   = Topbar
+
+	if cfg.ShowIcon then
+		N("ImageLabel",{
+			Size=UDim2.new(0,16,0,16), Position=UDim2.new(0,14,0.5,-8),
+			Image=cfg.Icon, ImageColor3=C.Text,
+			BackgroundTransparency=1, Parent=Topbar,
+		})
+	end
+
+	-- control buttons — minimal text style, no pill
+	local function CtrlBtn(label, xOff)
+		local b = N("TextButton",{
+			Size=UDim2.new(0,28,0,28),
+			Position=UDim2.new(1,xOff,0.5,-14),
+			BackgroundTransparency=1,
+			Text=label, TextColor3=C.Dim,
+			Font=Enum.Font.Gotham, TextSize=13,
+			AutoButtonColor=false, BorderSizePixel=0,
+			Parent=Topbar,
+		})
+		b.MouseEnter:Connect(function() Tw(b,0.1,{TextColor3=C.Hi}) end)
+		b.MouseLeave:Connect(function() Tw(b,0.1,{TextColor3=C.Dim}) end)
+		return b
+	end
+
+	local CloseBtn = CtrlBtn("✕", -14)
+	local MinBtn   = CtrlBtn("−", -44)
+
+	-- ── sidebar ───────────────────────────────────────────────────
+	local Sidebar = N("Frame",{
+		Size=UDim2.new(0,120,1,-36),
+		Position=UDim2.new(0,0,0,36),
+		BackgroundColor3=C.Surface,
+		BorderSizePixel=0, Parent=Win,
+	})
+	N("Frame",{
+		Size=UDim2.new(0,1,1,0), Position=UDim2.new(1,-1,0,0),
+		BackgroundColor3=C.Border, BorderSizePixel=0, Parent=Sidebar,
+	})
+
+	-- tab list scroll
+	local TabScroll = ScF(0)
+	TabScroll.Size   = UDim2.new(1,0,1,-46)
+	TabScroll.Parent = Sidebar
+	List(0).Parent   = TabScroll
+	Pad(6,0,0,6).Parent = TabScroll
+	Conn(TabScroll.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"),function()
+		TabScroll.CanvasSize = UDim2.new(0,0,0,TabScroll.UIListLayout.AbsoluteContentSize.Y+12)
+	end)
+
+	-- sidebar footer
+	local Footer = N("Frame",{
+		Size=UDim2.new(1,0,0,46), Position=UDim2.new(0,0,1,-46),
+		BackgroundColor3=C.Surface, BorderSizePixel=0, Parent=Sidebar,
+	})
+	N("Frame",{
+		Size=UDim2.new(1,0,0,1), BackgroundColor3=C.Border,
+		BorderSizePixel=0, Parent=Footer,
+	})
+	local av = N("Frame",{
+		Size=UDim2.new(0,22,0,22), Position=UDim2.new(0,10,0.5,-11),
+		BackgroundColor3=C.Card, BorderSizePixel=0, Parent=Footer,
+	})
+	N("ImageLabel",{
+		Size=UDim2.new(1,0,1,0),
+		Image="https://www.roblox.com/headshot-thumbnail/image?userId="..LP.UserId.."&width=420&height=420&format=png",
+		BackgroundTransparency=1, Parent=av,
+	})
+
+	local un = LP.Name
+	local masked = #un > 4 and un:sub(1,#un-3).."..." or un
+	local unL = Lbl(masked,10,C.Text,Enum.Font.GothamBold)
+	unL.Size=UDim2.new(1,-38,0,10); unL.Position=UDim2.new(0,36,0,cfg.HidePremium and 17 or 10)
+	unL.Parent=Footer
+	if not cfg.HidePremium then
+		local tg = Lbl(".gg/blackair",9,C.Dim,Enum.Font.Gotham)
+		tg.Size=UDim2.new(1,-38,0,9); tg.Position=UDim2.new(0,36,1,-15)
+		tg.Parent=Footer
+	end
+
+	-- ── controls ─────────────────────────────────────────────────
+	Conn(CloseBtn.MouseButton1Up, function()
+		Win.Visible = false; uiHidden = true
+		Lib:MakeNotification({Name="Hidden",Content="RightShift to reopen.",Time=3})
+		cfg.CloseCallback()
+	end)
+	Conn(UIS.InputBegan, function(i)
+		if i.KeyCode == Enum.KeyCode.RightShift and uiHidden then
+			Win.Visible = true; uiHidden = false
+		end
+	end)
+	Conn(MinBtn.MouseButton1Up, function()
+		if minimized then
+			Win.ClipsDescendants = false
+			Sidebar.Visible = true
+			if activeContainer then activeContainer.Visible = true end
+			Tw(Win,0.32,{Size=UDim2.new(0,560,0,310)})
+			MinBtn.Text = "−"
+		else
+			Win.ClipsDescendants = true
+			Sidebar.Visible = false
+			if activeContainer then activeContainer.Visible = false end
+			local tw = math.max(WinName.TextBounds.X + 80, 120)
+			Tw(Win,0.32,{Size=UDim2.new(0,tw,0,36)})
+			MinBtn.Text = "□"
+		end
+		minimized = not minimized
+	end)
+
+	-- ── intro ─────────────────────────────────────────────────────
+	local function RunIntro()
+		Win.Visible = false
+		local logo = N("ImageLabel",{
+			Size=UDim2.new(0,18,0,18), AnchorPoint=Vector2.new(0.5,0.5),
+			Position=UDim2.new(0.5,0,0.44,0),
+			Image=cfg.IntroIcon, ImageColor3=C.Hi,
+			ImageTransparency=1, BackgroundTransparency=1, Parent=Root,
+		})
+		local il = Lbl(cfg.IntroText,13,C.Hi,Enum.Font.GothamBlack)
+		il.Size=UDim2.new(1,0,1,0)
+		il.TextXAlignment=Enum.TextXAlignment.Center
+		il.TextTransparency=1; il.AnchorPoint=Vector2.new(0.5,0.5)
+		il.Position=UDim2.new(0.5,16,0.5,0); il.Parent=Root
+		Tw(logo,0.22,{ImageTransparency=0,Position=UDim2.new(0.5,0,0.5,0)})
+		task.wait(0.55)
+		Tw(logo,0.22,{Position=UDim2.new(0.5,-(il.TextBounds.X/2+2),0.5,0)})
+		task.wait(0.24)
+		Tw(il,0.22,{TextTransparency=0})
+		task.wait(1.5)
+		Tw(il,0.18,{TextTransparency=1})
+		task.wait(0.12)
+		Tw(logo,0.18,{ImageTransparency=1})
+		task.wait(0.2)
+		Win.Visible=true; logo:Destroy(); il:Destroy()
+	end
+	if cfg.IntroEnabled then task.spawn(RunIntro) end
+
+	-- ═══════════════════════════════════════════════════════════
+	--  TAB API
+	-- ═══════════════════════════════════════════════════════════
+	local TabAPI = {}
+
+	function TabAPI:MakeTab(tabCfg)
+		tabCfg             = tabCfg or {}
+		tabCfg.Name        = tabCfg.Name        or "Tab"
+		tabCfg.Icon        = tabCfg.Icon        or ""
+		tabCfg.PremiumOnly = tabCfg.PremiumOnly or false
+
+		-- ── sidebar button ────────────────────────────────────────
+		local tabBtn = N("TextButton",{
+			Size=UDim2.new(1,-8,0,26),
+			Position=UDim2.new(0,0,0,0),
+			BackgroundColor3=C.Surface,
+			BackgroundTransparency=1,
+			Text="", AutoButtonColor=false,
+			Parent=TabScroll,
+		})
+
+		-- 2px left border = active indicator (Blackair signature)
+		local strip = N("Frame",{
+			Size=UDim2.new(0,2,0.6,0),
+			Position=UDim2.new(0,0,0.2,0),
+			BackgroundColor3=C.Hi, BackgroundTransparency=1,
+			BorderSizePixel=0, Parent=tabBtn,
+		})
+
+		local tabIco = N("ImageLabel",{
+			Size=UDim2.new(0,13,0,13), AnchorPoint=Vector2.new(0,0.5),
+			Position=UDim2.new(0,10,0.5,0),
+			Image=tabCfg.Icon, ImageColor3=C.Dim,
+			BackgroundTransparency=1, Parent=tabBtn,
+		})
+
+		local tabLbl = Lbl(tabCfg.Name, 12, C.Muted, Enum.Font.GothamSemibold)
+		tabLbl.Size=UDim2.new(1,-26,1,0); tabLbl.Position=UDim2.new(0,26,0,0)
+		tabLbl.Name="Lbl"; tabLbl.Parent=tabBtn
+
+		-- ── content scroll ────────────────────────────────────────
+		local content = ScF(3)
+		content.Size     = UDim2.new(1,-121,1,-36)
+		content.Position = UDim2.new(0,121,0,36)
+		content.Parent   = Win
+		content.Visible  = false
+		content.Name     = "Content"
+		List(4).Parent   = content
+		Pad(10,8,8,10).Parent = content
+		Conn(content.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"),function()
+			content.CanvasSize=UDim2.new(0,0,0,content.UIListLayout.AbsoluteContentSize.Y+18)
+		end)
+
+		local function setActive(on)
+			if on then
+				Tw(strip, 0.18, {BackgroundTransparency=0})
+				Tw(tabIco,0.18, {ImageColor3=C.Hi})
+				Tw(tabLbl,0.18, {TextColor3=C.Hi, TextTransparency=0})
+				tabLbl.Font = Enum.Font.GothamBold
+				Tw(tabBtn, 0.18, {BackgroundTransparency=0.92})
+			else
+				Tw(strip, 0.18, {BackgroundTransparency=1})
+				Tw(tabIco,0.18, {ImageColor3=C.Dim})
+				Tw(tabLbl,0.18, {TextColor3=C.Muted, TextTransparency=0.2})
+				tabLbl.Font = Enum.Font.GothamSemibold
+				Tw(tabBtn, 0.18, {BackgroundTransparency=1})
+			end
+		end
+
+		table.insert(tabs, {btn=tabBtn, container=content, setActive=setActive})
+
+		if firstTab then
+			firstTab = false
+			setActive(true)
+			content.Visible  = true
+			activeContainer  = content
+		end
+
+		Conn(tabBtn.MouseButton1Click, function()
+			for _, te in next, tabs do
+				te.setActive(false)
+				te.container.Visible = false
+			end
+			setActive(true)
+			content.Visible = true
+			activeContainer = content
+		end)
+		Conn(tabBtn.MouseEnter, function()
+			if not content.Visible then
+				Tw(tabBtn,0.12,{BackgroundTransparency=0.96})
+			end
+		end)
+		Conn(tabBtn.MouseLeave, function()
+			if not content.Visible then
+				Tw(tabBtn,0.12,{BackgroundTransparency=1})
+			end
+		end)
+
+		-- ═══════════════════════════════════════════════════════
+		--  ELEMENT FACTORY
+		-- ═══════════════════════════════════════════════════════
+		local function BuildEF(host)
+			local EF = {}
+
+			-- LABEL
+			function EF:AddLabel(text, icon)
+				local hasIco = icon and icon ~= ""
+				local xOff   = hasIco and 34 or 10
+				local f = Card(host, 28)
+				local l = Lbl(text or "Label", 12, C.Text, Enum.Font.GothamSemibold)
+				l.Size=UDim2.new(1,-(xOff+6),1,0); l.Position=UDim2.new(0,xOff,0,0)
+				l.Name="Lbl"; l.Parent=f
+				if hasIco then
+					N("ImageLabel",{
+						Size=UDim2.new(0,12,0,12), AnchorPoint=Vector2.new(0,0.5),
+						Position=UDim2.new(0,10,0.5,0), Image=icon,
+						ImageColor3=C.Muted, BackgroundTransparency=1, Parent=f,
+					})
+				end
+				local api={}
+				function api:Set(v) f.Lbl.Text=tostring(v) end
+				return api
+			end
+
+			-- PARAGRAPH
+			function EF:AddParagraph(title, body)
+				title=title or "Title"; body=body or ""
+				local f = N("Frame",{
+					Size=UDim2.new(1,0,0,28), BackgroundColor3=C.Card,
+					BorderSizePixel=0, Parent=host,
+				},{Stroke(C.Border,1)})
+				local tl=Lbl(title,12,C.Text,Enum.Font.GothamBold)
+				tl.Size=UDim2.new(1,-20,0,12); tl.Position=UDim2.new(0,10,0,8); tl.Parent=f
+				local bl=Lbl("",11,C.Muted,Enum.Font.Gotham)
+				bl.Size=UDim2.new(1,-20,0,0); bl.Position=UDim2.new(0,10,0,24)
+				bl.AutomaticSize=Enum.AutomaticSize.Y; bl.TextWrapped=true; bl.Name="Body"; bl.Parent=f
+				Conn(bl:GetPropertyChangedSignal("Text"),function()
+					f.Size=UDim2.new(1,0,0,bl.TextBounds.Y+30)
+				end)
+				bl.Text=body
+				local api={}
+				function api:Set(v) f.Body.Text=tostring(v) end
+				return api
+			end
+
+			-- BUTTON
+			function EF:AddButton(bcfg)
+				bcfg=bcfg or {}
+				bcfg.Name=bcfg.Name or "Button"
+				bcfg.Callback=bcfg.Callback or function()end
+				bcfg.Icon=bcfg.Icon or ""
+				local f=Card(host,30)
+				local btn=Btn(); btn.Parent=f
+				local l=Lbl(bcfg.Name,12,C.Text,Enum.Font.GothamSemibold)
+				l.Size=UDim2.new(1,-30,1,0); l.Position=UDim2.new(0,10,0,0)
+				l.Name="Lbl"; l.Parent=f
+				if bcfg.Icon~="" then
+					N("ImageLabel",{
+						Size=UDim2.new(0,11,0,11), Position=UDim2.new(1,-20,0.5,-5),
+						Image=bcfg.Icon, ImageColor3=C.Dim, BackgroundTransparency=1, Parent=f,
+					})
+				end
+				Conn(btn.MouseEnter,      function() HOn(f) end)
+				Conn(btn.MouseLeave,      function() HOff(f) end)
+				Conn(btn.MouseButton1Down,function() HPrs(f) end)
+				Conn(btn.MouseButton1Up,  function() HOn(f); task.spawn(bcfg.Callback) end)
+				local api={}
+				function api:Set(v) f.Lbl.Text=tostring(v) end
+				return api
+			end
+
+			-- TOGGLE
+			function EF:AddToggle(tcfg)
+				tcfg=tcfg or {}
+				tcfg.Name=tcfg.Name or "Toggle"
+				tcfg.Default=tcfg.Default~=nil and tcfg.Default or false
+				tcfg.Callback=tcfg.Callback or function()end
+				tcfg.Flag=tcfg.Flag or nil
+				tcfg.Save=tcfg.Save or false
+				local Toggle={Value=tcfg.Default,Save=tcfg.Save,Type="Toggle"}
+				local f=Card(host,30)
+				local btn=Btn(); btn.Parent=f
+				local l=Lbl(tcfg.Name,12,C.Text,Enum.Font.GothamSemibold)
+				l.Size=UDim2.new(1,-56,1,0); l.Position=UDim2.new(0,10,0,0); l.Parent=f
+
+				-- sharp pill (no corner radius = consistent with design)
+				local pill=N("Frame",{
+					Size=UDim2.new(0,30,0,14),
+					Position=UDim2.new(1,-10,0.5,0), AnchorPoint=Vector2.new(1,0.5),
+					BackgroundColor3=C.PillOff, BorderSizePixel=0, Parent=f,
+				},{Stroke(C.Border,1)})
+				local knob=N("Frame",{
+					Size=UDim2.new(0,8,0,8),
+					Position=UDim2.new(0,3,0.5,0), AnchorPoint=Vector2.new(0,0.5),
+					BackgroundColor3=C.Muted, BorderSizePixel=0, Parent=pill,
+				})
+				function Toggle:Set(v)
+					self.Value=v
+					Tw(knob,0.18,{Position=v and UDim2.new(1,-11,0.5,0) or UDim2.new(0,3,0.5,0), BackgroundColor3=v and C.Base or C.Muted})
+					Tw(pill,0.18,{BackgroundColor3=v and C.PillOn or C.PillOff})
+					tcfg.Callback(self.Value)
+				end
+				Toggle:Set(Toggle.Value)
+				Conn(btn.MouseEnter,      function() HOn(f) end)
+				Conn(btn.MouseLeave,      function() HOff(f) end)
+				Conn(btn.MouseButton1Down,function() HPrs(f) end)
+				Conn(btn.MouseButton1Up,  function() HOn(f); Toggle:Set(not Toggle.Value); SaveFlag(game.GameId) end)
+				if tcfg.Flag then Lib.Flags[tcfg.Flag]=Toggle end
+				return Toggle
+			end
+
+			-- SLIDER
+			function EF:AddSlider(scfg)
+				scfg=scfg or {}
+				scfg.Name=scfg.Name or "Slider"
+				scfg.Min=scfg.Min or 0; scfg.Max=scfg.Max or 100
+				scfg.Increment=scfg.Increment or 1; scfg.Default=scfg.Default or 50
+				scfg.Callback=scfg.Callback or function()end
+				scfg.ValueName=scfg.ValueName or ""
+				scfg.Flag=scfg.Flag or nil; scfg.Save=scfg.Save or false
+				local Slider={Value=scfg.Default,Save=scfg.Save,Type="Slider"}
+				local dragging=false
+				local f=Card(host,52)
+				local nl=Lbl(scfg.Name,12,C.Text,Enum.Font.GothamSemibold)
+				nl.Size=UDim2.new(1,-64,0,12); nl.Position=UDim2.new(0,10,0,7); nl.Parent=f
+				local vl=Lbl("",11,C.Muted,Enum.Font.GothamBold)
+				vl.Size=UDim2.new(0,54,0,12); vl.Position=UDim2.new(1,-64,0,7)
+				vl.TextXAlignment=Enum.TextXAlignment.Right; vl.Name="Val"; vl.Parent=f
+
+				local track=N("Frame",{
+					Size=UDim2.new(1,-20,0,4), Position=UDim2.new(0,10,0,30),
+					BackgroundColor3=C.Track, BorderSizePixel=0, Parent=f,
+				},{Stroke(C.Border,1)})
+				local fill=N("Frame",{
+					Size=UDim2.new(0,0,1,0),
+					BackgroundColor3=C.Fill, BorderSizePixel=0, Parent=track,
+				})
+				local handle=N("Frame",{
+					Size=UDim2.new(0,9,0,9),
+					AnchorPoint=Vector2.new(0.5,0.5),
+					Position=UDim2.new(0,0,0.5,0),
+					BackgroundColor3=C.Hi, BorderSizePixel=0, Parent=track,
+				})
+
+				function Slider:Set(v)
+					self.Value=math.clamp(Rnd(v,scfg.Increment),scfg.Min,scfg.Max)
+					local pct=(self.Value-scfg.Min)/(scfg.Max-scfg.Min)
+					Tw(fill,0.08,{Size=UDim2.new(pct,0,1,0)})
+					Tw(handle,0.08,{Position=UDim2.new(pct,0,0.5,0)})
+					local txt=tostring(self.Value)
+					if scfg.ValueName~="" then txt=txt.." "..scfg.ValueName end
+					vl.Text=txt; scfg.Callback(self.Value)
+				end
+				track.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true end end)
+				track.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end end)
+				UIS.InputChanged:Connect(function(i)
+					if dragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+						local pct=math.clamp((i.Position.X-track.AbsolutePosition.X)/track.AbsoluteSize.X,0,1)
+						Slider:Set(scfg.Min+(scfg.Max-scfg.Min)*pct); SaveFlag(game.GameId)
+					end
+				end)
+				Slider:Set(Slider.Value)
+				if scfg.Flag then Lib.Flags[scfg.Flag]=Slider end
+				return Slider
+			end
+
+			-- DROPDOWN
+			function EF:AddDropdown(dcfg)
+				dcfg=dcfg or {}
+				dcfg.Name=dcfg.Name or "Dropdown"; dcfg.Options=dcfg.Options or {}
+				dcfg.Default=dcfg.Default or ""; dcfg.Callback=dcfg.Callback or function()end
+				dcfg.Flag=dcfg.Flag or nil; dcfg.Save=dcfg.Save or false
+				local DD={Value=dcfg.Default,Options=dcfg.Options,Buttons={},Toggled=false,Type="Dropdown",Save=dcfg.Save}
+				local maxVis=5
+				if not table.find(DD.Options,DD.Value) then DD.Value="..." end
+
+				local outer=N("Frame",{
+					Size=UDim2.new(1,0,0,30), BackgroundColor3=C.Card,
+					BorderSizePixel=0, ClipsDescendants=true, Parent=host,
+				},{Stroke(C.Border,1)})
+				local hdr=N("Frame",{Size=UDim2.new(1,0,0,30),BackgroundTransparency=1,Parent=outer})
+				local hdrBtn=Btn(); hdrBtn.Parent=hdr
+				local hl=Lbl(dcfg.Name,12,C.Text,Enum.Font.GothamSemibold)
+				hl.Size=UDim2.new(0.5,0,1,0); hl.Position=UDim2.new(0,10,0,0); hl.Parent=hdr
+				local sl=Lbl("...",11,C.Muted,Enum.Font.Gotham)
+				sl.Size=UDim2.new(0.4,0,1,0); sl.Position=UDim2.new(0.52,0,0,0)
+				sl.TextXAlignment=Enum.TextXAlignment.Right; sl.Name="Sel"; sl.Parent=hdr
+				local arr=N("ImageLabel",{
+					Size=UDim2.new(0,10,0,10), Position=UDim2.new(1,-18,0.5,-5),
+					Image="rbxassetid://7072706796", ImageColor3=C.Dim,
+					BackgroundTransparency=1, Parent=hdr,
+				})
+				N("Frame",{Size=UDim2.new(1,0,0,1),Position=UDim2.new(0,0,0,29),BackgroundColor3=C.Border,BorderSizePixel=0,Visible=false,Name="Line",Parent=outer})
+				local optSc=ScF(2); optSc.Size=UDim2.new(1,0,1,-30); optSc.Position=UDim2.new(0,0,0,30); optSc.Parent=outer
+				List(0).Parent=optSc; Pad(2,4,4,2).Parent=optSc
+				Conn(optSc.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"),function()
+					optSc.CanvasSize=UDim2.new(0,0,0,optSc.UIListLayout.AbsoluteContentSize.Y+4)
+				end)
+
+				local function AddOpts(opts)
+					for _,opt in pairs(opts) do
+						local ob=N("TextButton",{Size=UDim2.new(1,0,0,22),BackgroundColor3=C.Card,BackgroundTransparency=1,Text="",AutoButtonColor=false,Parent=optSc})
+						local ol=Lbl(opt,11,C.Muted,Enum.Font.GothamSemibold)
+						ol.Size=UDim2.new(1,-16,1,0); ol.Position=UDim2.new(0,8,0,0); ol.Name="Lbl"; ol.Parent=ob
+						ob.MouseEnter:Connect(function() if DD.Value~=opt then Tw(ob,0.08,{BackgroundTransparency=0.5}) end end)
+						ob.MouseLeave:Connect(function() if DD.Value~=opt then Tw(ob,0.08,{BackgroundTransparency=1}) end end)
+						Conn(ob.MouseButton1Click,function() DD:Set(opt); SaveFlag(game.GameId) end)
+						DD.Buttons[opt]=ob
+					end
+				end
+				function DD:Refresh(opts,clear)
+					if clear then for _,v in pairs(self.Buttons) do v:Destroy() end table.clear(self.Options) table.clear(self.Buttons) end
+					self.Options=opts; AddOpts(opts)
+				end
+				function DD:Set(v)
+					if not table.find(self.Options,v) then
+						self.Value="..."; hdr.Sel.Text="..."; hdr.Sel.TextColor3=C.Muted
+						for _,b in pairs(self.Buttons) do Tw(b,0.08,{BackgroundTransparency=1}) Tw(b.Lbl,0.08,{TextColor3=C.Muted}) end
+						return
+					end
+					self.Value=v; hdr.Sel.Text=v; hdr.Sel.TextColor3=C.Text
+					for _,b in pairs(self.Buttons) do Tw(b,0.08,{BackgroundTransparency=1}) Tw(b.Lbl,0.08,{TextColor3=C.Muted}) end
+					if self.Buttons[v] then Tw(self.Buttons[v],0.08,{BackgroundTransparency=0}) Tw(self.Buttons[v].Lbl,0.08,{TextColor3=C.Hi}) end
+					dcfg.Callback(self.Value)
+				end
+				Conn(hdrBtn.MouseButton1Click,function()
+					DD.Toggled=not DD.Toggled
+					outer:FindFirstChild("Line").Visible=DD.Toggled
+					Tw(arr,0.12,{Rotation=DD.Toggled and 180 or 0})
+					local h=DD.Toggled and (30+math.min(#DD.Options,maxVis)*23+4) or 30
+					Tw(outer,0.12,{Size=UDim2.new(1,0,0,h)})
+				end)
+				DD:Refresh(DD.Options,false); DD:Set(DD.Value)
+				if dcfg.Flag then Lib.Flags[dcfg.Flag]=DD end
+				return DD
+			end
+
+			-- BIND
+			function EF:AddBind(bcfg)
+				bcfg=bcfg or {}
+				bcfg.Name=bcfg.Name or "Bind"; bcfg.Default=bcfg.Default or Enum.KeyCode.Unknown
+				bcfg.Hold=bcfg.Hold or false; bcfg.Callback=bcfg.Callback or function()end
+				bcfg.Flag=bcfg.Flag or nil; bcfg.Save=bcfg.Save or false
+				local Bind={Value=nil,Binding=false,Type="Bind",Save=bcfg.Save}
+				local holding=false
+				local f=Card(host,30); local btn=Btn(); btn.Parent=f
+				local l=Lbl(bcfg.Name,12,C.Text,Enum.Font.GothamSemibold)
+				l.Size=UDim2.new(1,-72,1,0); l.Position=UDim2.new(0,10,0,0); l.Parent=f
+				local box=N("Frame",{
+					Size=UDim2.new(0,24,0,16), Position=UDim2.new(1,-10,0.5,0), AnchorPoint=Vector2.new(1,0.5),
+					BackgroundColor3=C.Track, BorderSizePixel=0, Parent=f,
+				},{Stroke(C.Border,1)})
+				local bl2=Lbl("",10,C.Text,Enum.Font.GothamBold)
+				bl2.Size=UDim2.new(1,0,1,0); bl2.TextXAlignment=Enum.TextXAlignment.Center
+				bl2.Name="Val"; bl2.Parent=box
+				Conn(bl2:GetPropertyChangedSignal("Text"),function() Tw(box,0.12,{Size=UDim2.new(0,math.max(24,bl2.TextBounds.X+10),0,16)}) end)
+				Conn(btn.InputEnded,function(i)
+					if i.UserInputType==Enum.UserInputType.MouseButton1 and not Bind.Binding then
+						Bind.Binding=true; box.Val.Text="..."
+					end
+				end)
+				Conn(UIS.InputBegan,function(i)
+					if UIS:GetFocusedTextBox() then return end
+					if (i.KeyCode.Name==Bind.Value or i.UserInputType.Name==Bind.Value) and not Bind.Binding then
+						if bcfg.Hold then holding=true; bcfg.Callback(true)
+						else bcfg.Callback() end
+					elseif Bind.Binding then
+						local key
+						pcall(function() if not Has(BL_KEYS,i.KeyCode) then key=i.KeyCode end end)
+						pcall(function() if Has(WL_MOUSE,i.UserInputType) and not key then key=i.UserInputType end end)
+						Bind:Set(key or Bind.Value); SaveFlag(game.GameId)
+					end
+				end)
+				Conn(UIS.InputEnded,function(i)
+					if i.KeyCode.Name==Bind.Value or i.UserInputType.Name==Bind.Value then
+						if bcfg.Hold and holding then holding=false; bcfg.Callback(false) end
+					end
+				end)
+				Conn(btn.MouseEnter,function() HOn(f) end); Conn(btn.MouseLeave,function() HOff(f) end)
+				Conn(btn.MouseButton1Down,function() HPrs(f) end); Conn(btn.MouseButton1Up,function() HOn(f) end)
+				function Bind:Set(k)
+					self.Binding=false; self.Value=k or self.Value
+					if type(self.Value)=="userdata" then self.Value=self.Value.Name end
+					box.Val.Text=tostring(self.Value) or "—"
+				end
+				Bind:Set(bcfg.Default)
+				if bcfg.Flag then Lib.Flags[bcfg.Flag]=Bind end
+				return Bind
+			end
+
+			-- TEXTBOX
+			function EF:AddTextbox(tcfg)
+				tcfg=tcfg or {}
+				tcfg.Name=tcfg.Name or "Textbox"; tcfg.Default=tcfg.Default or ""
+				tcfg.TextDisappear=tcfg.TextDisappear or false; tcfg.Callback=tcfg.Callback or function()end
+				local f=Card(host,30); local btn=Btn(); btn.Parent=f
+				local l=Lbl(tcfg.Name,12,C.Text,Enum.Font.GothamSemibold)
+				l.Size=UDim2.new(1,-80,1,0); l.Position=UDim2.new(0,10,0,0); l.Parent=f
+				local wrap=N("Frame",{
+					Size=UDim2.new(0,24,0,16), Position=UDim2.new(1,-10,0.5,0), AnchorPoint=Vector2.new(1,0.5),
+					BackgroundColor3=C.Track, BorderSizePixel=0, Parent=f,
+				},{Stroke(C.Border,1)})
+				local tb=N("TextBox",{
+					Size=UDim2.new(1,0,1,0), BackgroundTransparency=1,
+					TextColor3=C.Text, PlaceholderColor3=C.Dim, PlaceholderText="...",
+					Font=Enum.Font.GothamSemibold, TextXAlignment=Enum.TextXAlignment.Center,
+					TextSize=11, ClearTextOnFocus=false, Text=tcfg.Default, Parent=wrap,
+				})
+				Conn(tb:GetPropertyChangedSignal("Text"),function()
+					Tw(wrap,0.12,{Size=UDim2.new(0,math.max(24,tb.TextBounds.X+10),0,16)})
+				end)
+				Conn(tb.FocusLost,function() tcfg.Callback(tb.Text) if tcfg.TextDisappear then tb.Text="" end end)
+				Conn(btn.MouseEnter,function() HOn(f) end); Conn(btn.MouseLeave,function() HOff(f) end)
+				Conn(btn.MouseButton1Down,function() HPrs(f) end)
+				Conn(btn.MouseButton1Up,function() HOn(f); tb:CaptureFocus() end)
+			end
+
+			-- COLORPICKER
+			function EF:AddColorpicker(ccfg)
+				ccfg=ccfg or {}; ccfg.Name=ccfg.Name or "Color"
+				ccfg.Default=ccfg.Default or Color3.fromRGB(255,255,255)
+				ccfg.Callback=ccfg.Callback or function()end
+				ccfg.Flag=ccfg.Flag or nil; ccfg.Save=ccfg.Save or false
+				local ch,cs,cv=Color3.toHSV(ccfg.Default)
+				local CP={Value=ccfg.Default,Toggled=false,Type="Colorpicker",Save=ccfg.Save}
+				local outer=N("Frame",{
+					Size=UDim2.new(1,0,0,30), BackgroundColor3=C.Card,
+					BorderSizePixel=0, ClipsDescendants=true, Parent=host,
+				},{Stroke(C.Border,1)})
+				local hdr=N("Frame",{Size=UDim2.new(1,0,0,30),BackgroundTransparency=1,Parent=outer})
+				local hdrBtn=Btn(); hdrBtn.Parent=hdr
+				local hl2=Lbl(ccfg.Name,12,C.Text,Enum.Font.GothamSemibold)
+				hl2.Size=UDim2.new(1,-40,1,0); hl2.Position=UDim2.new(0,10,0,0); hl2.Parent=hdr
+				local prev=N("Frame",{
+					Size=UDim2.new(0,16,0,16), Position=UDim2.new(1,-10,0.5,0), AnchorPoint=Vector2.new(1,0.5),
+					BackgroundColor3=ccfg.Default, BorderSizePixel=0, Parent=hdr,
+				},{Stroke(C.Border,1)})
+				N("Frame",{Size=UDim2.new(1,0,0,1),Position=UDim2.new(0,0,0,29),BackgroundColor3=C.Border,BorderSizePixel=0,Visible=false,Name="Line",Parent=outer})
+				local panel=N("Frame",{Size=UDim2.new(1,0,0,94),Position=UDim2.new(0,0,0,30),BackgroundTransparency=1,Parent=outer},{Pad(6,8,8,6)})
+				local cbox=N("ImageLabel",{Size=UDim2.new(1,-18,1,0),Image="rbxassetid://4155801252",BackgroundColor3=Color3.fromHSV(ch,1,1),Parent=panel})
+				local cSel=N("ImageLabel",{Size=UDim2.new(0,10,0,10),AnchorPoint=Vector2.new(0.5,0.5),Position=UDim2.new(cs,0,1-cv,0),Image="http://www.roblox.com/asset/?id=4805639000",BackgroundTransparency=1,Parent=cbox})
+				local hbar=N("Frame",{Size=UDim2.new(0,10,1,0),Position=UDim2.new(1,-10,0,0),Parent=panel},{N("UIGradient",{Rotation=270,Color=ColorSequence.new{ColorSequenceKeypoint.new(0,Color3.fromRGB(255,0,4)),ColorSequenceKeypoint.new(0.2,Color3.fromRGB(234,255,0)),ColorSequenceKeypoint.new(0.4,Color3.fromRGB(21,255,0)),ColorSequenceKeypoint.new(0.6,Color3.fromRGB(0,255,255)),ColorSequenceKeypoint.new(0.8,Color3.fromRGB(0,17,255)),ColorSequenceKeypoint.new(0.9,Color3.fromRGB(255,0,251)),ColorSequenceKeypoint.new(1,Color3.fromRGB(255,0,4))}})})
+				local hSel=N("ImageLabel",{Size=UDim2.new(0,10,0,10),AnchorPoint=Vector2.new(0.5,0.5),Position=UDim2.new(0.5,0,1-ch,0),Image="http://www.roblox.com/asset/?id=4805639000",BackgroundTransparency=1,Parent=hbar})
+				local function UpdCP()
+					local col=Color3.fromHSV(ch,cs,cv)
+					prev.BackgroundColor3=col; cbox.BackgroundColor3=Color3.fromHSV(ch,1,1)
+					CP.Value=col; ccfg.Callback(col); SaveFlag(game.GameId)
+				end
+				local cc2,hc2
+				Conn(cbox.InputBegan,function(i)
+					if i.UserInputType~=Enum.UserInputType.MouseButton1 then return end
+					if cc2 then cc2:Disconnect() end
+					cc2=Conn(Run.RenderStepped,function()
+						cs=math.clamp((Mouse.X-cbox.AbsolutePosition.X)/cbox.AbsoluteSize.X,0,1)
+						cv=1-math.clamp((Mouse.Y-cbox.AbsolutePosition.Y)/cbox.AbsoluteSize.Y,0,1)
+						cSel.Position=UDim2.new(cs,0,1-cv,0); UpdCP()
+					end)
+				end)
+				Conn(cbox.InputEnded,function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 and cc2 then cc2:Disconnect() end end)
+				Conn(hbar.InputBegan,function(i)
+					if i.UserInputType~=Enum.UserInputType.MouseButton1 then return end
+					if hc2 then hc2:Disconnect() end
+					hc2=Conn(Run.RenderStepped,function()
+						local y=math.clamp((Mouse.Y-hbar.AbsolutePosition.Y)/hbar.AbsoluteSize.Y,0,1)
+						hSel.Position=UDim2.new(0.5,0,y,0); ch=1-y; UpdCP()
+					end)
+				end)
+				Conn(hbar.InputEnded,function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 and hc2 then hc2:Disconnect() end end)
+				Conn(hdrBtn.MouseButton1Click,function()
+					CP.Toggled=not CP.Toggled
+					outer:FindFirstChild("Line").Visible=CP.Toggled
+					Tw(outer,0.12,{Size=UDim2.new(1,0,0,CP.Toggled and 124 or 30)})
+				end)
+				function CP:Set(v)
+					self.Value=v; ch,cs,cv=Color3.toHSV(v)
+					prev.BackgroundColor3=v; cbox.BackgroundColor3=Color3.fromHSV(ch,1,1)
+					cSel.Position=UDim2.new(cs,0,1-cv,0); hSel.Position=UDim2.new(0.5,0,1-ch,0)
+					ccfg.Callback(v)
+				end
+				CP:Set(CP.Value)
+				if ccfg.Flag then Lib.Flags[ccfg.Flag]=CP end
+				return CP
+			end
+
+			return EF
+		end -- BuildEF
+
+		-- section wrapper
+		local RootEF={}
+		function RootEF:AddSection(scfg)
+			scfg=scfg or {}; scfg.Name=scfg.Name or "Section"
+			local sec=N("Frame",{Size=UDim2.new(1,0,0,18),BackgroundTransparency=1,Parent=content})
+			local sl2=Lbl(scfg.Name:upper(),9,C.Dim,Enum.Font.GothamBold)
+			sl2.Size=UDim2.new(1,0,0,9); sl2.Position=UDim2.new(0,2,0,2); sl2.Parent=sec
+			N("Frame",{Size=UDim2.new(1,0,0,1),Position=UDim2.new(0,0,0,15),BackgroundColor3=C.Div,BorderSizePixel=0,Parent=sec})
+			local holder=N("Frame",{Size=UDim2.new(1,0,0,0),Position=UDim2.new(0,0,0,20),BackgroundTransparency=1,Name="H",Parent=sec},{List(3)})
+			Conn(holder.UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"),function()
+				holder.Size=UDim2.new(1,0,0,holder.UIListLayout.AbsoluteContentSize.Y)
+				sec.Size=UDim2.new(1,0,0,holder.UIListLayout.AbsoluteContentSize.Y+22)
+			end)
+			local SF={}
+			for k,v in next,BuildEF(holder) do SF[k]=v end
+			return SF
+		end
+		for k,v in next,BuildEF(content) do RootEF[k]=v end
+
+		if tabCfg.PremiumOnly then
+			for k in next,RootEF do RootEF[k]=function()end end
+			content:ClearAllChildren()
+			local g=N("Frame",{Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,Parent=content})
+			local gl=Lbl("Premium only",12,C.Muted,Enum.Font.GothamBold)
+			gl.Size=UDim2.new(1,-20,0,12); gl.Position=UDim2.new(0,10,0,10); gl.Parent=g
+			local gl2=Lbl("Join .gg/blackair for access.",11,C.Dim,Enum.Font.Gotham)
+			gl2.Size=UDim2.new(1,-20,0,0); gl2.Position=UDim2.new(0,10,0,26)
+			gl2.AutomaticSize=Enum.AutomaticSize.Y; gl2.TextWrapped=true; gl2.Parent=g
+		end
+
+		return RootEF
+	end -- MakeTab
+
+	return TabAPI
+end -- MakeWindow
+
+function Lib:Destroy() Root:Destroy() end
+
+return Lib
