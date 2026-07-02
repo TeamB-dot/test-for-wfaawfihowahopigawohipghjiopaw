@@ -19,12 +19,11 @@ local BlackairLib = {
 			Divider    = Color3.fromRGB(28, 28, 28),
 			Text       = Color3.fromRGB(240, 240, 240),
 			TextDark   = Color3.fromRGB(110, 110, 110),
-			-- Blackair-Amber, gleiche Akzentfarbe wie auf blackair.dev (--amber:#FFB000)
-			Accent     = Color3.fromRGB(255, 176, 0),
-			AccentDim  = Color3.fromRGB(120, 90, 25),
-			Gold       = Color3.fromRGB(255, 176, 0),
-			GoldLight  = Color3.fromRGB(255, 202, 100),
-			GoldDark   = Color3.fromRGB(150, 108, 20),
+			Accent     = Color3.fromRGB(255, 255, 255),
+			AccentDim  = Color3.fromRGB(180, 180, 180),
+			Gold       = Color3.fromRGB(255, 255, 255),
+			GoldLight  = Color3.fromRGB(200, 200, 200),
+			GoldDark   = Color3.fromRGB(130, 130, 130),
 		}
 	},
 	SelectedTheme = "Default",
@@ -57,13 +56,6 @@ for _, Interface in ipairs(_hui:GetChildren()) do
 		Interface:Destroy()
 	end
 end
-
--- Frosted-Glass-Look: echter Hintergrund-Blur statt nur Transparenz, damit
--- die halbtransparenten Panels auch wirklich "durchsichtig" wirken.
-local GlassBlur = Instance.new("BlurEffect")
-GlassBlur.Name = "BlackairGlassBlur"
-GlassBlur.Size = 0
-GlassBlur.Parent = game:GetService("Lighting")
 
 function BlackairLib:IsRunning()
 	return Blackair.Parent == (gethui and gethui() or game:GetService("CoreGui"))
@@ -382,7 +374,7 @@ function BlackairLib:MakeNotification(NotificationConfig)
 				Position         = UDim2.new(1, 14, 0, 0),
 				AutomaticSize    = Enum.AutomaticSize.Y,
 				ClipsDescendants = false,
-				BackgroundTransparency = 0.08,
+				BackgroundTransparency = 0.12,
 			}
 		), {
 			Create("UIStroke", { Color = Color3.fromRGB(44, 44, 44), Thickness = 1 }),
@@ -500,7 +492,7 @@ function BlackairLib:MakeWindow(WindowConfig)
 	local WindowStuff = AddThemeObject(SetChildren(SetProps(MakeElement("RoundFrame", Color3.fromRGB(18, 18, 18), 0, 8), {
 		Size     = UDim2.new(0, 148, 1, -44),
 		Position = UDim2.new(0, 0, 0, 44),
-		BackgroundTransparency = 0.1
+		BackgroundTransparency = 0.16
 	}), {
 		AddThemeObject(SetProps(MakeElement("Frame"), {
 			Size = UDim2.new(0, 8, 1, 0),
@@ -522,27 +514,23 @@ function BlackairLib:MakeWindow(WindowConfig)
 				AnchorPoint = Vector2.new(0, 0.5),
 				Size        = UDim2.new(0, 28, 0, 28),
 				Position    = UDim2.new(0, 10, 0.5, 0),
-				BorderSizePixel = 0
+				BorderSizePixel = 0,
+				ClipsDescendants = true
 			}), {
 				SetProps(MakeElement("Image", "https://www.roblox.com/headshot-thumbnail/image?userId=" .. LocalPlayer.UserId .. "&width=420&height=420&format=png"), {
 					Size = UDim2.new(1, 0, 1, 0)
 				}),
-				MakeElement("Corner", 1),
-				AddThemeObject(Create("UIStroke", {Thickness = 1.5, Transparency = 0.35}), "Accent")
+				MakeElement("Corner", 1)
 			}), "Divider"),
-			AddThemeObject(SetProps(MakeElement("Label", LocalPlayer.Name:sub(1, -6) .. "****", 12), {
-				Size     = UDim2.new(1, -54, 0, 12),
-				Position = UDim2.new(0, 46, 0, WindowConfig.HidePremium and 18 or 12),
-				Font     = Enum.Font.GothamBold,
+			AddThemeObject(SetProps(MakeElement("Label", "discord.gg/zzHWqtDeFB", 12), {
+				Size        = UDim2.new(1, -54, 0, 12),
+				Position    = UDim2.new(0, 46, 0.5, 0),
+				AnchorPoint = Vector2.new(0, 0.5),
+				Font        = Enum.Font.GothamBold,
 				ClipsDescendants = true,
-				TextColor3 = Color3.fromRGB(220, 220, 220)
-			}), "Text"),
-			AddThemeObject(SetProps(MakeElement("Label", ".gg/blackair", 11), {
-				Size     = UDim2.new(1, -54, 0, 11),
-				Position = UDim2.new(0, 46, 1, -22),
-				Visible  = not WindowConfig.HidePremium,
-				TextColor3 = Color3.fromRGB(90, 90, 90)
-			}), "GoldDark")
+				Visible     = not WindowConfig.HidePremium,
+				TextColor3  = Color3.fromRGB(220, 220, 220)
+			}), "Text")
 		})
 	}), "Second")
 
@@ -560,7 +548,7 @@ function BlackairLib:MakeWindow(WindowConfig)
 		BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	}), {
 		Create("UIGradient", {
-			Color = ColorSequence.new(Color3.fromRGB(255, 176, 0)),
+			Color = ColorSequence.new(Color3.fromRGB(255, 255, 255)),
 			Transparency = NumberSequence.new{
 				NumberSequenceKeypoint.new(0, 1),
 				NumberSequenceKeypoint.new(0.5, 0.45),
@@ -574,12 +562,12 @@ function BlackairLib:MakeWindow(WindowConfig)
 		Position    = UDim2.new(0.5, -300, 0.5, -168),
 		Size        = UDim2.new(0, 600, 0, 336),
 		ClipsDescendants = true,
-		BackgroundTransparency = 0.07
+		BackgroundTransparency = 0.15
 	}), {
 		SetChildren(SetProps(MakeElement("RoundFrame", Color3.fromRGB(12, 12, 12), 0, 10), {
 			Size     = UDim2.new(1, 0, 0, 44),
 			Name     = "TopBar",
-			BackgroundTransparency = 0.04
+			BackgroundTransparency = 0.12
 		}), {
 			WindowName,
 			WindowTopBarLine,
@@ -617,7 +605,6 @@ function BlackairLib:MakeWindow(WindowConfig)
 	AddConnection(CloseBtn.MouseButton1Up, function()
 		MainWindow.Visible = false
 		UIHidden = true
-		TweenService:Create(GlassBlur, TweenInfo.new(0.35, Enum.EasingStyle.Quad), {Size = 0}):Play()
 		BlackairLib:MakeNotification({
 			Name    = "Interface hidden",
 			Content = "Press RightShift to reopen",
@@ -630,7 +617,6 @@ function BlackairLib:MakeWindow(WindowConfig)
 		if Input.KeyCode == Enum.KeyCode.RightShift and UIHidden then
 			MainWindow.Visible = true
 			UIHidden = false
-			TweenService:Create(GlassBlur, TweenInfo.new(0.35, Enum.EasingStyle.Quad), {Size = 10}):Play()
 		end
 	end)
 
@@ -671,7 +657,7 @@ function BlackairLib:MakeWindow(WindowConfig)
 			TextXAlignment = Enum.TextXAlignment.Center,
 			Font     = Enum.Font.GothamBold,
 			TextTransparency = 1,
-			TextColor3 = Color3.fromRGB(255, 176, 0)
+			TextColor3 = Color3.fromRGB(255, 255, 255)
 		})
 		TweenService:Create(Logo, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {ImageTransparency = 0, Position = UDim2.new(0.5, 0, 0.5, 0)}):Play()
 		task.wait(0.7)
@@ -681,8 +667,8 @@ function BlackairLib:MakeWindow(WindowConfig)
 		task.wait(1.8)
 		TweenService:Create(IntroText, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 1}):Play()
 
-		-- Glass pop-in: Fenster startet leicht geschrumpft/transparenter und
-		-- tweent in die finale Größe/Transparenz rein statt hart aufzupoppen.
+		-- Pop-in: Fenster startet leicht geschrumpft/transparenter und tweent
+		-- in die finale Größe/Transparenz rein statt hart aufzupoppen.
 		MainWindow.Size = UDim2.new(0, 600, 0, 300)
 		MainWindow.Position = UDim2.new(0.5, -300, 0.5, -150)
 		MainWindow.BackgroundTransparency = 1
@@ -690,18 +676,13 @@ function BlackairLib:MakeWindow(WindowConfig)
 		TweenService:Create(MainWindow, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
 			Size = UDim2.new(0, 600, 0, 336),
 			Position = UDim2.new(0.5, -300, 0.5, -168),
-			BackgroundTransparency = 0.07
+			BackgroundTransparency = 0.15
 		}):Play()
-		TweenService:Create(GlassBlur, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {Size = 10}):Play()
 		Logo:Destroy()
 		IntroText:Destroy()
 	end
 
-	if WindowConfig.IntroEnabled then
-		LoadSequence()
-	else
-		TweenService:Create(GlassBlur, TweenInfo.new(0.5, Enum.EasingStyle.Quad), {Size = 10}):Play()
-	end
+	if WindowConfig.IntroEnabled then LoadSequence() end
 
 	-- ── Tab API ──────────────────────────────────────────────────────────────
 
@@ -1009,15 +990,9 @@ function BlackairLib:MakeWindow(WindowConfig)
 
 				local SliderFill = Create("Frame", {
 					Size             = UDim2.new(0, 0, 1, 0),
-					BackgroundColor3 = Color3.fromRGB(255, 176, 0),
+					BackgroundColor3 = Color3.fromRGB(220, 220, 220),
 					BorderSizePixel  = 0
-				}, {
-					Create("UICorner", {CornerRadius = UDim.new(0, 4)}),
-					Create("UIGradient", {Color = ColorSequence.new{
-						ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 205, 100)),
-						ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 176, 0))
-					}})
-				})
+				}, {Create("UICorner", {CornerRadius = UDim.new(0, 4)})})
 
 				local FillLabel = SetProps(MakeElement("Label", "", 12), {
 					Size     = UDim2.new(1, -8, 1, 0),
@@ -1633,7 +1608,6 @@ end
 
 function BlackairLib:Destroy()
 	Blackair:Destroy()
-	if GlassBlur then GlassBlur:Destroy() end
 end
 
 return BlackairLib
