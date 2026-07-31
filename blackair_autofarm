@@ -369,8 +369,9 @@ task.spawn(function()
 
             local pos = stationCF.Position
             currentStationPos = pos
-            platform.CFrame = CFrame.new(pos.X, pos.Y - 10.25, pos.Z)
-            hrp.CFrame = CFrame.new(pos.X, pos.Y - 9, pos.Z)
+            -- 15 Studs UNTER der Packstation
+            platform.CFrame = CFrame.new(pos.X, pos.Y - 15.25, pos.Z)
+            hrp.CFrame = CFrame.new(pos.X, pos.Y - 14, pos.Z)
             task.wait(2)
 
             if not equipBohrer() then task.wait(1) continue end
@@ -387,6 +388,8 @@ task.spawn(function()
 
         if farmActive then
             farmActive = false
+            state.farmActive = false
+            saveJSON(SAVE_FILE, state)
             print("[Farm] Alle Stationen done -> Safe TP -> Server Hop")
             hrp.CFrame = CFrame.new(SAFE_POS)
             task.wait(1.5)
@@ -475,17 +478,20 @@ end)
 
 FarmTab:AddToggle({
     Name     = "Auto Farm (1x Durchlauf -> Server Hop)",
-    Default  = false,
+    Default  = state.farmActive,
     Callback = function(val)
         farmActive = val
-        if val then
-            state.farmActive = true
-            saveJSON(SAVE_FILE, state)
-        else
-            state.farmActive = false
-            saveJSON(SAVE_FILE, state)
-        end
+        state.farmActive = val
+        saveJSON(SAVE_FILE, state)
         print("[Farm]", val and "Gestartet" or "Gestoppt")
+        if not val then
+            -- Toggle aus -> sofort Safe TP + Server Hop
+            task.spawn(function()
+                hrp.CFrame = CFrame.new(SAFE_POS)
+                task.wait(1.5)
+                serverHop()
+            end)
+        end
     end,
 })
 
