@@ -1,0 +1,517 @@
+-- ============================================================
+-- #BlackAir AutoFarm | Emergency Emden
+-- ============================================================
+
+-- Anti-Double-Load + Auto-Run nach Server Hop via getgenv
+if getgenv().BlackAirRunning then return end
+getgenv().BlackAirRunning = true
+
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+-- Nach Teleport: game.Loaded feuert â†’ Script neu laden
+game.Loaded:Connect(function()
+    task.wait(2)
+    getgenv().BlackAirRunning = false
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/TeamB-dot/test-for-wfaawfihowahopigawohipghjiopaw/refs/heads/main/blackair_autofarm"))()
+    end)
+end)
+
+-- STATE-Shim: falls aus autoexec (kein live-reload Kontext)
+if not STATE then
+    local running = true
+    local cleanups = {}
+    local conns = {}
+    STATE = {
+        alive     = function() return running end,
+        onCleanup = function(fn) table.insert(cleanups, fn) end,
+        connect   = function(event, fn)
+            local c = event:Connect(fn)
+            table.insert(conns, c)
+            return c
+        end,
+    }
+    game:BindToClose(function()
+        running = false
+        for _, fn in ipairs(cleanups) do pcall(fn) end
+        for _, c  in ipairs(conns)    do pcall(function() c:Disconnect() end) end
+    end)
+end
+
+-- ============================================================
+-- Services
+-- ============================================================
+local RS               = game:GetService("ReplicatedStorage")
+local Players          = game:GetService("Players")
+local HttpService      = game:GetService("HttpService")
+local TeleportService  = game:GetService("TeleportService")
+
+local lp           = Players.LocalPlayer
+local ClientShared = require(RS:WaitForChild("ClientShared"))
+
+local char     = lp.Character or lp.CharacterAdded:Wait()
+local hrp      = char:WaitForChild("HumanoidRootPart")
+local humanoid = char:WaitForChild("Humanoid")
+lp.CharacterAdded:Connect(function(c)
+    char     = c
+    hrp      = c:WaitForChild("HumanoidRootPart")
+    humanoid = c:WaitForChild("Humanoid")
+end)
+
+-- ============================================================
+-- BridgeNet2
+-- ============================================================
+local dataRemote       = RS:WaitForChild("BridgeNet2"):WaitForChild("dataRemoteEvent")
+local identStorage     = RS.BridgeNet2:WaitForChild("identifierStorage")
+local addToToolbarByte = identStorage:GetAttribute("RemoteEvent_AddItemToToolbar")
+
+-- ============================================================
+-- Persistence (JSON)
+-- ============================================================
+local SAVE_FILE = "blackair_data.json"
+local HOP_FILE  = "blackair_servers.json"
+
+local function loadJSON(file, default)
+    local ok, raw = pcall(readfile, file)
+    if ok and raw and raw ~= "" then
+        local ok2, t = pcall(HttpService.JSONDecode, HttpService, raw)
+        if ok2 and type(t) == "table" then return t end
+    end
+    return default
+end
+local function saveJSON(file, t)
+    pcall(writefile, file, HttpService:JSONEncode(t))
+end
+
+local state       = loadJSON(SAVE_FILE, { farmActive = false, webhookUrl = "" })
+local lastServers = loadJSON(HOP_FILE, {})
+if type(lastServers) ~= "table" then lastServers = {} end
+
+-- ============================================================
+-- Package Count
+-- ============================================================
+local function getPackageCount()
+    local count = 0
+    for _, item in pairs(ClientShared.LocalPlayer.Backpack) do
+        if item.ItemId == "SmallPackage" then count += 1 end
+    end
+    return count
+end
+
+-- ============================================================
+-- Farm Config
+-- ============================================================
+local SAFE_POS = Vector3.new(-2542.39, 53.41, 1471.43)
+local DRILL_ID = "{aa34268f-5372-4c25-b5ab-ece62c1a21eb}"
+
+local STATIONS = {
+    CFrame.new(-2081.09619, 41.7817841,   406.687653, -0.0175019503, 0, 0.999846935, 0, 1, 0, -0.999846935, 0, -0.0175019503),
+    CFrame.new(-1878.66565, 41.7818031,  -620.797241,  0.990270376,  0, -0.13915664, 0, 1, 0,  0.13915664,  0,  0.990270376),
+    CFrame.new(-1688.67664, 41.9758148, -1261.73682,  -0.601814151,  0, -0.798636556,0, 1, 0,  0.798636556, 0, -0.601814151),
+    CFrame.new( 461.827881, 41.5832367, -2226.04248,  -0.0523990393, 0,  0.998626292,0, 1, 0, -0.998626292, 0, -0.0523990393),
+    CFrame.new( 508.704926, 41.7818413, -1763.54431,   0.993567169,  0,  0.113244563,0, 1, 0, -0.113244563, 0,  0.993567169),
+    CFrame.new(-236.558716, 41.3807678,  -684.20575,  -0.999392271,  0, -0.0348687991,0,1, 0,  0.0348687991,0, -0.999392271),
+    CFrame.new(-964.281982, 41.7813606,   224.907257,  -0.999392271, 0, -0.0348687991,0,1, 0,  0.0348687991,0, -0.999392271),
+    CFrame.new( 111.759506, 73.4533691,   906.270508,   0.173735321, 0, -0.984792471,0, 1, 0,  0.984792471, 0,  0.173735321),
+    CFrame.new( 814.693237, 68.8260956,   249.448196,  -1,           0,  0,           0, 1, 0,  0,           0, -1),
+}
+
+local ignore             = workspace:WaitForChild("Ignore")
+local farmActive         = false
+local currentStationPos  = Vector3.zero
+
+-- Platform unter Packstation
+local platform = Instance.new("Part")
+platform.Size        = Vector3.new(8, 0.5, 8)
+platform.Anchored    = true
+platform.CanCollide  = true
+platform.Transparency = 0.5
+platform.BrickColor  = BrickColor.new("Bright blue")
+platform.Parent      = workspace
+STATE.onCleanup(function() platform:Destroy() end)
+
+-- ============================================================
+-- Collect
+-- ============================================================
+local function collectPackage(child)
+    if child.ClassName ~= "Model" then return end
+    local toolName = child:GetAttribute("ToolName")
+    if not toolName then
+        for _, c in ipairs(child:GetChildren()) do
+            local t = c:GetAttribute("ToolName")
+            if t then toolName = t break end
+        end
+    end
+    if toolName ~= "SmallPackage" then return end
+    local ok, cf = pcall(function() return child:GetBoundingBox() end)
+    if ok and (currentStationPos - cf.Position).Magnitude > 200 then return end
+    local handle = child:FindFirstChild("Handle")
+    if not handle then return end
+    local proxy = handle:FindFirstChild("proxy") or handle:FindFirstChildWhichIsA("ProximityPrompt")
+    if not proxy then return end
+    proxy.HoldDuration = 0
+    handle.CFrame = hrp.CFrame
+    task.wait(0.05)
+    fireproximityprompt(proxy)
+end
+
+STATE.connect(ignore.ChildAdded, function(child)
+    task.wait(0.1)
+    task.spawn(collectPackage, child)
+end)
+
+-- ============================================================
+-- Drill helpers
+-- ============================================================
+local function equipBohrer()
+    local tool = char:FindFirstChild(DRILL_ID) or lp.Backpack:FindFirstChild(DRILL_ID)
+    if not tool then return false end
+    if not char:FindFirstChild(DRILL_ID) then
+        humanoid:EquipTool(tool)
+        task.wait(0.5)
+    end
+    return true
+end
+
+local function findNearestPS()
+    local closest, closestDist
+    local ok, folder = pcall(function()
+        return workspace.NEUE_MAP_STUCTURE.Props.Props.PackstationProps.Packstation
+    end)
+    if not ok or not folder then return nil, math.huge end
+    for _, ps in ipairs(folder:GetChildren()) do
+        local ok2, cf = pcall(function() return ps:GetModelCFrame() end)
+        if ok2 then
+            local d = (hrp.Position - cf.Position).Magnitude
+            if not closestDist or d < closestDist then closestDist = d; closest = ps end
+        end
+    end
+    return closest, closestDist or math.huge
+end
+
+local function openAllDoors(psModel)
+    local tool = char:FindFirstChild(DRILL_ID)
+    if not tool then return end
+    local event = tool:FindFirstChild("OnBohrerTriggered")
+    if not event then return end
+    for _, door in ipairs(psModel:GetChildren()) do
+        if not farmActive then break end
+        if door.Name ~= "Door" or door:GetAttribute("IsOpen") then continue end
+        for _ = 1, 3 do
+            if door:GetAttribute("IsOpen") or not farmActive then break end
+            event:FireServer(door)
+            task.wait(1)
+        end
+    end
+end
+
+-- Station-CFrames haben schon die richtige Y (unter der Packstation)
+-- Kein Raycast nÃ¶tig, direkt nutzen
+local function getStationTP(stationCF)
+    local pos = stationCF.Position
+    return Vector3.new(pos.X, pos.Y, pos.Z)
+end
+
+-- ============================================================
+-- Open Packages
+-- ============================================================
+local function openAllPackages()
+    if not addToToolbarByte then
+        warn("[Open] Byte nicht gefunden"); return 0
+    end
+    local ids = {}
+    for id, item in pairs(ClientShared.LocalPlayer.Backpack) do
+        if item.ItemId == "SmallPackage" then table.insert(ids, id) end
+    end
+    print("[Open] Ã–ffne", #ids, "Packages...")
+
+    local opened = 0
+    for _, id in ipairs(ids) do
+        local known = {}
+        for _, v in ipairs(lp.Backpack:GetChildren()) do known[v] = true end
+
+        dataRemote:FireServer({{ KevArgs = { id, 1 } }, addToToolbarByte})
+        task.wait(0.1)
+
+        local tool, deadline = nil, tick() + 4
+        repeat
+            task.wait(0.05)
+            for _, v in ipairs(lp.Backpack:GetChildren()) do
+                if v:IsA("Tool") and not known[v] then tool = v break end
+            end
+        until tool or tick() > deadline
+
+        if not tool then warn("[Open] Kein Tool fÃ¼r", id) continue end
+        local openEvt = tool:FindFirstChild("OnOpenRemoteEvent")
+        if not openEvt then continue end
+
+        humanoid:EquipTool(tool)
+        task.wait(0.2)
+        openEvt:FireServer()
+        opened += 1
+        print("[Open]", opened, "/", #ids)
+        task.wait(0.4)
+    end
+    print("[Open] Fertig!", opened, "geÃ¶ffnet")
+    return opened
+end
+
+-- ============================================================
+-- Server Hop (grÃ¶ÃŸter Server, letzte 5 skippen)
+-- ============================================================
+local PlaceID = game.PlaceId
+
+local function serverHop()
+    print("[Hop] Suche Server...")
+    state.farmActive = true
+    saveJSON(SAVE_FILE, state)
+
+    local function tryHop(cursor)
+        local url = "https://games.roblox.com/v1/games/" .. PlaceID
+            .. "/servers/Public?sortOrder=Desc&limit=100"
+        if cursor and cursor ~= "" then url = url .. "&cursor=" .. cursor end
+
+        local ok, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(url))
+        end)
+        if not ok or not result or not result.data then
+            task.wait(5); return tryHop("")
+        end
+
+        -- Kandidaten sammeln: nicht voll, nicht in letzten 5
+        local candidates = {}
+        for _, server in ipairs(result.data) do
+            local id = tostring(server.id)
+            if server.playing < server.maxPlayers then
+                local skip = false
+                for _, v in ipairs(lastServers) do
+                    if v == id then skip = true break end
+                end
+                if not skip then
+                    table.insert(candidates, { id = id, playing = server.playing })
+                end
+            end
+        end
+
+        -- GrÃ¶ÃŸten Server wÃ¤hlen
+        table.sort(candidates, function(a, b) return a.playing > b.playing end)
+
+        if #candidates > 0 then
+            local target = candidates[1]
+            table.insert(lastServers, target.id)
+            if #lastServers > 5 then table.remove(lastServers, 1) end
+            saveJSON(HOP_FILE, lastServers)
+            print("[Hop] Springe auf Server mit", target.playing, "Spielern")
+            pcall(TeleportService.TeleportToPlaceInstance, TeleportService, PlaceID, target.id, lp)
+            task.wait(8)
+        end
+
+        local next = result.nextPageCursor
+        if next and next ~= "" then return tryHop(next) end
+
+        print("[Hop] Alle Server besucht, liste leeren...")
+        lastServers = {}
+        saveJSON(HOP_FILE, lastServers)
+        task.wait(3)
+        tryHop("")
+    end
+
+    tryHop("")
+end
+
+-- ============================================================
+-- Farm Loop (1x durchlauf â†’ Safe TP â†’ Server Hop)
+-- ============================================================
+task.spawn(function()
+    while STATE.alive() do
+        if not farmActive then task.wait(0.5) continue end
+
+        for i, stationCF in ipairs(STATIONS) do
+            if not farmActive or not STATE.alive() then break end
+            print(string.format("[Farm] Station %d / %d", i, #STATIONS))
+
+            local tpPos = getStationTP(stationCF)
+            currentStationPos = stationCF.Position
+            -- Platform direkt auf Station-Y, Spieler 1 Stud drÃ¼ber
+            platform.CFrame = CFrame.new(tpPos.X, tpPos.Y - 0.25, tpPos.Z)
+            hrp.CFrame = CFrame.new(tpPos.X, tpPos.Y + 1, tpPos.Z)
+            task.wait(0.5)
+
+            if not equipBohrer() then task.wait(1) continue end
+            local psModel, dist = findNearestPS()
+            if not psModel or dist > 120 then task.wait(1) continue end
+
+            openAllDoors(psModel)
+            task.wait(2)
+        end
+
+        if farmActive then
+            farmActive = false
+            print("[Farm] Alle Stationen done â†’ Safe TP â†’ Server Hop")
+            hrp.CFrame = CFrame.new(SAFE_POS)
+            task.wait(1.5)
+            serverHop()
+        end
+    end
+end)
+
+-- ============================================================
+-- Give Packages
+-- ============================================================
+local giveActive      = false
+local giveTargetName  = ""
+
+local function findPlayer(partial)
+    if not partial or partial == "" then return nil end
+    local lower = partial:lower()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp and p.Name:lower():find(lower, 1, true) then return p end
+    end
+end
+
+local function givePackagesToPlayer(target)
+    if not addToToolbarByte then warn("[Give] Byte fehlt") return end
+    local ids = {}
+    for id, item in pairs(ClientShared.LocalPlayer.Backpack) do
+        if item.ItemId == "SmallPackage" then table.insert(ids, id) end
+    end
+    print("[Give] Sende", #ids, "Packages an", target.Name)
+
+    local gave = 0
+    for _, id in ipairs(ids) do
+        if not giveActive then break end
+        local known = {}
+        for _, v in ipairs(lp.Backpack:GetChildren()) do known[v] = true end
+
+        dataRemote:FireServer({{ KevArgs = { id, 1 } }, addToToolbarByte})
+        task.wait(0.1)
+
+        local tool, deadline = nil, tick() + 4
+        repeat
+            task.wait(0.05)
+            for _, v in ipairs(lp.Backpack:GetChildren()) do
+                if v:IsA("Tool") and not known[v] then tool = v break end
+            end
+        until tool or tick() > deadline
+
+        if not tool then continue end
+        humanoid:EquipTool(tool)
+        task.wait(0.15)
+
+        local giveEvt = tool:FindFirstChild("GivePackageRemoteEvent")
+        if giveEvt and target.Character then
+            giveEvt:FireServer(target.Character)
+            gave += 1
+            print("[Give]", gave, "/", #ids)
+        end
+        task.wait(0.3)
+    end
+    print("[Give] Fertig!", gave, "gegeben")
+end
+
+-- ============================================================
+-- Orion UI
+-- ============================================================
+local OrionLib = loadstring(game:HttpGet(
+    "https://raw.githubusercontent.com/TeamB-dot/test-for-wfaawfihowahopigawohipghjiopaw/refs/heads/main/new%20gui%20NO%20OBF33"
+))()
+
+local Window   = OrionLib:MakeWindow({
+    Name = "#BlackAir AutoFarm",
+    HidePremium = true,
+    SaveConfig   = false,
+    IntroEnabled = false,
+})
+local FarmTab  = Window:MakeTab({ Name = "Farm", Icon = "rbxassetid://4483345998" })
+local GiveTab  = Window:MakeTab({ Name = "Give", Icon = "rbxassetid://4483362458" })
+
+-- Live Package Counter
+local packageLabel = FarmTab:AddLabel("ðŸ“¦ Packages: laden...")
+task.spawn(function()
+    while STATE.alive() do
+        task.wait(1)
+        pcall(function() packageLabel:Set("ðŸ“¦ Packages: " .. getPackageCount()) end)
+    end
+end)
+
+FarmTab:AddToggle({
+    Name     = "Auto Farm (1x Durchlauf â†’ Server Hop)",
+    Default  = false,
+    Callback = function(val)
+        farmActive = val
+        if val then
+            state.farmActive = true
+            saveJSON(SAVE_FILE, state)
+        else
+            state.farmActive = false
+            saveJSON(SAVE_FILE, state)
+        end
+        print("[Farm]", val and "Gestartet" or "Gestoppt")
+    end,
+})
+
+FarmTab:AddButton({
+    Name     = "Pakete einsammeln (manuell)",
+    Callback = function()
+        for _, child in ipairs(ignore:GetChildren()) do task.spawn(collectPackage, child) end
+    end,
+})
+
+FarmTab:AddButton({
+    Name     = "Alle Packages Ã¶ffnen",
+    Callback = function() task.spawn(openAllPackages) end,
+})
+
+FarmTab:AddButton({
+    Name     = "Server Hop (jetzt)",
+    Callback = function() task.spawn(serverHop) end,
+})
+
+-- Give Tab
+GiveTab:AddLabel("Ziel-Spieler muss in der NÃ¤he sein!")
+
+GiveTab:AddTextbox({
+    Name          = "Spieler Name (partial)",
+    Default       = "",
+    TextDisappear = false,
+    Callback = function(text)
+        giveTargetName = text
+        local found = findPlayer(text)
+        if found then
+            print("[Give] Gefunden:", found.Name)
+        end
+    end,
+})
+
+GiveTab:AddToggle({
+    Name     = "Give Packages [Start/Stop]",
+    Default  = false,
+    Callback = function(val)
+        giveActive = val
+        if val then
+            local target = findPlayer(giveTargetName)
+            if not target then
+                warn("[Give] Spieler nicht gefunden: " .. giveTargetName)
+                giveActive = false
+                return
+            end
+            task.spawn(function()
+                while giveActive do
+                    givePackagesToPlayer(target)
+                    task.wait(1)
+                end
+            end)
+        end
+    end,
+})
+
+OrionLib:Init()
+
+-- ============================================================
+-- Auto-Resume nach Server Hop
+-- ============================================================
+if state.farmActive then
+    print("[AutoResume] Farm wird fortgesetzt...")
+    task.wait(3) -- kurz warten bis Spiel geladen
+    farmActive = true
+end
