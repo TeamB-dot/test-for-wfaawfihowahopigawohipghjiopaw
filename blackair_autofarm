@@ -476,16 +476,20 @@ task.spawn(function()
     end
 end)
 
+-- Guard: Callback beim Init-Feuern ignorieren
+local farmToggleReady = false
+
 FarmTab:AddToggle({
     Name     = "Auto Farm (1x Durchlauf -> Server Hop)",
     Default  = state.farmActive,
     Callback = function(val)
+        if not farmToggleReady then return end
         farmActive = val
         state.farmActive = val
         saveJSON(SAVE_FILE, state)
         print("[Farm]", val and "Gestartet" or "Gestoppt")
         if not val then
-            -- Toggle aus -> sofort Safe TP + Server Hop
+            -- Toggle manuell AUS -> Safe TP + Server Hop
             task.spawn(function()
                 hrp.CFrame = CFrame.new(SAFE_POS)
                 task.wait(1.5)
@@ -550,6 +554,9 @@ GiveTab:AddToggle({
 })
 
 OrionLib:Init()
+
+-- Toggle ist jetzt bereit fuer echte User-Klicks
+farmToggleReady = true
 
 -- ============================================================
 -- Auto-Resume nach Server Hop
