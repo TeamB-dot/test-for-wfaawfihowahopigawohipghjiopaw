@@ -102,7 +102,7 @@ end
 -- Farm Config
 -- ============================================================
 local SAFE_POS = Vector3.new(-2542.39, 53.41, 1471.43)
-local DRILL_ID = "{aa34268f-5372-4c25-b5ab-ece62c1a21eb}"
+-- Bohrer wird dynamisch gesucht (ItemId enthÃ¤lt "bohr" oder "drill")
 
 local STATIONS = {
     CFrame.new(-2081.09619, 41.7817841,   406.687653, -0.0175019503, 0, 0.999846935, 0, 1, 0, -0.999846935, 0, -0.0175019503),
@@ -163,13 +163,53 @@ end)
 -- ============================================================
 -- Drill helpers
 -- ============================================================
-local function equipBohrer()
-    local tool = char:FindFirstChild(DRILL_ID) or lp.Backpack:FindFirstChild(DRILL_ID)
-    if not tool then return false end
-    if not char:FindFirstChild(DRILL_ID) then
-        humanoid:EquipTool(tool)
-        task.wait(0.5)
+local function findBohrerID()
+    for id, item in pairs(ClientShared.LocalPlayer.Backpack) do
+        local itemId = tostring(item.ItemId or ""):lower()
+        if itemId:find("bohr") or itemId:find("drill") then
+            return id, item.ItemId
+        end
     end
+    return nil
+end
+
+local equippedBohrerTool = nil
+
+local function equipBohrer()
+    -- Schon equipt?
+    if equippedBohrerTool and char:FindFirstChild(equippedBohrerTool.Name) then
+        return true
+    end
+    equippedBohrerTool = nil
+
+    local id, itemId = findBohrerID()
+    if not id then warn("[Bohrer] Nicht im Backpack gefunden") return false end
+    print("[Bohrer] Gefunden:", itemId, "UUID:", id)
+
+    local known = {}
+    for _, v in ipairs(lp.Backpack:GetChildren()) do known[v] = true end
+    for _, v in ipairs(char:GetChildren()) do if v:IsA("Tool") then known[v] = true end end
+
+    dataRemote:FireServer({{ KevArgs = { id, 1 } }, addToToolbarByte})
+    task.wait(0.2)
+
+    local tool, deadline = nil, tick() + 5
+    repeat
+        task.wait(0.05)
+        for _, v in ipairs(lp.Backpack:GetChildren()) do
+            if v:IsA("Tool") and not known[v] then tool = v break end
+        end
+        if not tool then
+            for _, v in ipairs(char:GetChildren()) do
+                if v:IsA("Tool") and not known[v] then tool = v break end
+            end
+        end
+    until tool or tick() > deadline
+
+    if not tool then warn("[Bohrer] Tool kam nicht an") return false end
+    equippedBohrerTool = tool
+    humanoid:EquipTool(tool)
+    task.wait(0.5)
     return true
 end
 
@@ -190,10 +230,20 @@ local function findNearestPS()
 end
 
 local function openAllDoors(psModel)
-    local tool = char:FindFirstChild(DRILL_ID)
-    if not tool then return end
-    local event = tool:FindFirstChild("OnBohrerTriggered")
-    if not event then return end
+    -- Bohrer-Tool im Character suchen
+    local tool = equippedBohrerTool and char:FindFirstChild(equippedBohrerTool.Name)
+    if not tool then
+        for _, v in ipairs(char:GetChildren()) do
+            if v:IsA("Tool") then tool = v break end
+        end
+    end
+    if not tool then warn("[Doors] Kein Bohrer-Tool im Character") return end
+    -- Remote Event suchen (OnBohrerTriggered o.Ã¤.)
+    local event
+    for _, v in ipairs(tool:GetDescendants()) do
+        if v:IsA("RemoteEvent") then event = v break end
+    end
+    if not event then warn("[Doors] Kein RemoteEvent in Tool:", tool.Name) return end
     for _, door in ipairs(psModel:GetChildren()) do
         if not farmActive then break end
         if door.Name ~= "Door" or door:GetAttribute("IsOpen") then continue end
