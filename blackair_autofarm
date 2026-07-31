@@ -8,7 +8,7 @@ getgenv().BlackAirRunning = true
 
 if not game:IsLoaded() then game.Loaded:Wait() end
 
--- Nach Teleport: game.Loaded feuert â†’ Script neu laden
+-- Nach Teleport: game.Loaded feuert -> Script neu laden
 game.Loaded:Connect(function()
     task.wait(2)
     getgenv().BlackAirRunning = false
@@ -102,7 +102,6 @@ end
 -- Farm Config
 -- ============================================================
 local SAFE_POS = Vector3.new(-2542.39, 53.41, 1471.43)
--- Bohrer wird dynamisch gesucht (ItemId enthÃ¤lt "bohr" oder "drill")
 
 local STATIONS = {
     CFrame.new(-2081.09619, 41.7817841,   406.687653, -0.0175019503, 0, 0.999846935, 0, 1, 0, -0.999846935, 0, -0.0175019503),
@@ -173,9 +172,18 @@ local function findBohrerID()
     return nil
 end
 
+local function findBohrerTool()
+    for _, v in ipairs(char:GetChildren()) do
+        if v:IsA("Tool") and v:FindFirstChild("OnBohrerTriggered") then return v end
+    end
+    for _, v in ipairs(lp.Backpack:GetChildren()) do
+        if v:IsA("Tool") and v:FindFirstChild("OnBohrerTriggered") then return v end
+    end
+    return nil
+end
+
 local function equipBohrer()
-    -- Schon im Character?
-    if findBohrerTool and findBohrerTool() then return true end
+    if findBohrerTool() then return true end
 
     local id, itemId = findBohrerID()
     if not id then warn("[Bohrer] Nicht im Backpack gefunden") return false end
@@ -218,37 +226,29 @@ local function findNearestPS()
     return closest, closestDist or math.huge
 end
 
-local function findBohrerTool()
-    -- Sucht Tool mit OnBohrerTriggered im Character oder Backpack
-    for _, v in ipairs(char:GetChildren()) do
-        if v:IsA("Tool") and v:FindFirstChild("OnBohrerTriggered") then return v end
-    end
-    for _, v in ipairs(lp.Backpack:GetChildren()) do
-        if v:IsA("Tool") and v:FindFirstChild("OnBohrerTriggered") then return v end
-    end
-    return nil
-end
-
 local function openAllDoors(psModel)
     local tool = findBohrerTool()
-    if not tool then warn("[Doors] Kein Bohrer-Tool gefunden") return end
-    local event = tool:FindFirstChild("OnBohrerTriggered")
-
-    -- Alle Doors im Packstation Model finden und Ã¶ffnen
-    for _, door in ipairs(psModel:GetDescendants()) do
-        if not farmActive then break end
-        if door.Name ~= "Door" then continue end
-        if door:GetAttribute("IsOpen") then continue end
-        event:FireServer(door)
-        task.wait(0.3)
+    if not tool then
+        if not equipBohrer() then warn("[Doors] Kein Bohrer") return end
+        tool = findBohrerTool()
+        if not tool then warn("[Doors] Tool immer noch nicht da") return end
     end
-end
+    local event = tool:FindFirstChild("OnBohrerTriggered")
+    if not event then warn("[Doors] OnBohrerTriggered nicht gefunden in", tool.Name) return end
 
--- Station-CFrames haben schon die richtige Y (unter der Packstation)
--- Kein Raycast nÃ¶tig, direkt nutzen
-local function getStationTP(stationCF)
-    local pos = stationCF.Position
-    return Vector3.new(pos.X, pos.Y, pos.Z)
+    local doors = {}
+    for _, v in ipairs(psModel:GetDescendants()) do
+        if v.Name == "Door" then table.insert(doors, v) end
+    end
+    print("[Doors] Gefunden:", #doors, "Doors")
+
+    for _, door in ipairs(doors) do
+        if not farmActive then break end
+        if door:GetAttribute("IsOpen") == true then continue end
+        event:FireServer(door)
+        task.wait(0.2)
+    end
+    print("[Doors] Fertig")
 end
 
 -- ============================================================
@@ -262,7 +262,7 @@ local function openAllPackages()
     for id, item in pairs(ClientShared.LocalPlayer.Backpack) do
         if item.ItemId == "SmallPackage" then table.insert(ids, id) end
     end
-    print("[Open] Ã–ffne", #ids, "Packages...")
+    print("[Open] Oeffne", #ids, "Packages...")
 
     local opened = 0
     for _, id in ipairs(ids) do
@@ -280,7 +280,7 @@ local function openAllPackages()
             end
         until tool or tick() > deadline
 
-        if not tool then warn("[Open] Kein Tool fÃ¼r", id) continue end
+        if not tool then warn("[Open] Kein Tool fuer", id) continue end
         local openEvt = tool:FindFirstChild("OnOpenRemoteEvent")
         if not openEvt then continue end
 
@@ -291,12 +291,12 @@ local function openAllPackages()
         print("[Open]", opened, "/", #ids)
         task.wait(0.4)
     end
-    print("[Open] Fertig!", opened, "geÃ¶ffnet")
+    print("[Open] Fertig!", opened, "geoeffnet")
     return opened
 end
 
 -- ============================================================
--- Server Hop (grÃ¶ÃŸter Server, letzte 5 skippen)
+-- Server Hop
 -- ============================================================
 local PlaceID = game.PlaceId
 
@@ -317,7 +317,6 @@ local function serverHop()
             task.wait(5); return tryHop("")
         end
 
-        -- Kandidaten sammeln: nicht voll, nicht in letzten 5
         local candidates = {}
         for _, server in ipairs(result.data) do
             local id = tostring(server.id)
@@ -332,7 +331,6 @@ local function serverHop()
             end
         end
 
-        -- GrÃ¶ÃŸten Server wÃ¤hlen
         table.sort(candidates, function(a, b) return a.playing > b.playing end)
 
         if #candidates > 0 then
@@ -359,7 +357,7 @@ local function serverHop()
 end
 
 -- ============================================================
--- Farm Loop (1x durchlauf â†’ Safe TP â†’ Server Hop)
+-- Farm Loop
 -- ============================================================
 task.spawn(function()
     while STATE.alive() do
@@ -369,24 +367,27 @@ task.spawn(function()
             if not farmActive or not STATE.alive() then break end
             print(string.format("[Farm] Station %d / %d", i, #STATIONS))
 
-            local tpPos = getStationTP(stationCF)
-            currentStationPos = stationCF.Position
-            -- Platform direkt auf Station-Y, Spieler 1 Stud drÃ¼ber
-            platform.CFrame = CFrame.new(tpPos.X, tpPos.Y - 0.25, tpPos.Z)
-            hrp.CFrame = CFrame.new(tpPos.X, tpPos.Y + 1, tpPos.Z)
-            task.wait(0.5)
+            local pos = stationCF.Position
+            currentStationPos = pos
+            platform.CFrame = CFrame.new(pos.X, pos.Y - 10.25, pos.Z)
+            hrp.CFrame = CFrame.new(pos.X, pos.Y - 9, pos.Z)
+            task.wait(2)
 
             if not equipBohrer() then task.wait(1) continue end
             local psModel, dist = findNearestPS()
-            if not psModel or dist > 120 then task.wait(1) continue end
+            if not psModel or dist > 120 then
+                warn("[Farm] Packstation zu weit:", dist)
+                task.wait(1)
+                continue
+            end
 
             openAllDoors(psModel)
-            task.wait(2)
+            task.wait(1.5)
         end
 
         if farmActive then
             farmActive = false
-            print("[Farm] Alle Stationen done â†’ Safe TP â†’ Server Hop")
+            print("[Farm] Alle Stationen done -> Safe TP -> Server Hop")
             hrp.CFrame = CFrame.new(SAFE_POS)
             task.wait(1.5)
             serverHop()
@@ -464,17 +465,16 @@ local Window   = OrionLib:MakeWindow({
 local FarmTab  = Window:MakeTab({ Name = "Farm", Icon = "rbxassetid://4483345998" })
 local GiveTab  = Window:MakeTab({ Name = "Give", Icon = "rbxassetid://4483362458" })
 
--- Live Package Counter
-local packageLabel = FarmTab:AddLabel("ðŸ“¦ Packages: laden...")
+local packageLabel = FarmTab:AddLabel("Packages: laden...")
 task.spawn(function()
     while STATE.alive() do
         task.wait(1)
-        pcall(function() packageLabel:Set("ðŸ“¦ Packages: " .. getPackageCount()) end)
+        pcall(function() packageLabel:Set("Packages: " .. getPackageCount()) end)
     end
 end)
 
 FarmTab:AddToggle({
-    Name     = "Auto Farm (1x Durchlauf â†’ Server Hop)",
+    Name     = "Auto Farm (1x Durchlauf -> Server Hop)",
     Default  = false,
     Callback = function(val)
         farmActive = val
@@ -497,7 +497,7 @@ FarmTab:AddButton({
 })
 
 FarmTab:AddButton({
-    Name     = "Alle Packages Ã¶ffnen",
+    Name     = "Alle Packages oeffnen",
     Callback = function() task.spawn(openAllPackages) end,
 })
 
@@ -506,8 +506,7 @@ FarmTab:AddButton({
     Callback = function() task.spawn(serverHop) end,
 })
 
--- Give Tab
-GiveTab:AddLabel("Ziel-Spieler muss in der NÃ¤he sein!")
+GiveTab:AddLabel("Ziel-Spieler muss in der Naehe sein!")
 
 GiveTab:AddTextbox({
     Name          = "Spieler Name (partial)",
@@ -551,6 +550,6 @@ OrionLib:Init()
 -- ============================================================
 if state.farmActive then
     print("[AutoResume] Farm wird fortgesetzt...")
-    task.wait(3) -- kurz warten bis Spiel geladen
+    task.wait(3)
     farmActive = true
 end
